@@ -1,155 +1,118 @@
 import 'dart:async';
-
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xmpp_stone/xmpp_stone.dart' as xmpp;
 
 abstract class Settings {
+  static const String shouldSaveAccount = 'shouldSaveAccount';
+  static const String isAccountSaved = 'isAccountSaved';
+  static const String wasExtended = 'wasShort';
+  static const String username = 'username';
+  static const String password = 'password';
+  static const String domain = 'domain';
+  static const String port = 'port';
+  static const String rememberMe = 'rememberMe';
+  static const String wasLoggedIn = 'wasLoggedIn';
 
-  static const String shouldSaveAccount = "shouldSaveAccount";
-  static const String isAccountSaved = "isAccountSaved";
-  static const String wasExtended = "wasShort";
-  static const String username = "username";
-  static const String password = "password";
-  static const String domain = "domain";
-  static const String port = "port";
-  static const String rememberMe = "rememberMe";
-  static const String wasLoggedIn = "wasLoggedIn";
+  void setAccountData(xmpp.XmppAccount account);
+  xmpp.XmppAccount? getAccountData();
 
-  setAccountData(xmpp.XmppAccount account);
-  xmpp.XmppAccount getAccountData();
+  void setBool(String setting, bool value);
+  bool? getBool(String setting);
 
-  setBool(String setting, bool value);
+  void setString(String setting, String value);
+  String? getString(String setting);
 
-  bool getBool(String setting);
+  void setInt(String setting, int value);
+  int? getInt(String setting);
 
-  setString(String setting, String value);
-
-  String getString(String setting);
-
-  setInt(String setting, int value);
-
-  int getInt(String setting);
-
-  remove(String setting);
-
+  void remove(String setting);
   int getDefaultPort();
-
   void forgetAccount();
-
-  init();
-
-  Future isInitialized();
+  void init();
+  Future<bool> isInitialized();
 }
 
 class SettingsImpl implements Settings {
-
-  Completer<bool> _initialized = Completer();
-
-  xmpp.XmppAccount _account;
-  var _prefs;
+  final Completer<bool> _initialized = Completer();
+  xmpp.XmppAccount? _account;
+  late SharedPreferences _prefs;
 
   SettingsImpl() {
     init();
   }
 
   @override
-  init() {
-    var future = SharedPreferences.getInstance();
-    future.then((prefs) {
+  void init() {
+    SharedPreferences.getInstance().then((prefs) {
       _prefs = prefs;
       _initialized.complete(true);
     });
   }
 
   @override
-  xmpp.XmppAccount getAccountData()  {
-    if (_account != null) {
-      return _account;
-    }
-    bool isSaved = _prefs.getBool(Settings.isAccountSaved);
-    if (isSaved != null && isSaved) {
-      String username = _prefs.getString(Settings.username);
-      String password = _prefs.getString(Settings.password);
-      String domain = _prefs.getString(Settings.domain);
-      int port = _prefs.getInt(Settings.port);
-      _account = xmpp.XmppAccount(username, username, domain, password, port);
-      return _account;
-    } else {
-      return null;
-    }
-  }
-
-  @override
-  setAccountData(xmpp.XmppAccount account)  {
-    if (account != null) {
-      _account = account;
-      if (getBool(Settings.rememberMe) == true) {
-        _prefs.setString(Settings.username, account.username);
-        _prefs.setString(Settings.password, account.password);
-        _prefs.setString(Settings.domain, account.domain);
-        _prefs.setInt(Settings.port, account.port);
-        _prefs.setBool(Settings.isAccountSaved, true);
+  xmpp.XmppAccount? getAccountData() {
+    if (_account != null) return _account;
+    final isSaved = _prefs.getBool(Settings.isAccountSaved);
+    if (isSaved == true) {
+      final u = _prefs.getString(Settings.username);
+      final p = _prefs.getString(Settings.password);
+      final d = _prefs.getString(Settings.domain);
+      final port = _prefs.getInt(Settings.port);
+      if (u != null && p != null && d != null && port != null) {
+        _account = xmpp.XmppAccount(u, u, d, p, port);
+        return _account;
       }
     }
+    return null;
   }
 
   @override
-  bool getBool(String setting) {
-    var result = _prefs.getBool(setting);
-    if (result == null) result = false;
-    return result;
+  void setAccountData(xmpp.XmppAccount account) {
+    _account = account;
+    if (getBool(Settings.rememberMe) == true) {
+      _prefs.setString(Settings.username, account.username);
+      _prefs.setString(Settings.password, account.password);
+      _prefs.setString(Settings.domain, account.domain);
+      _prefs.setInt(Settings.port, account.port);
+      _prefs.setBool(Settings.isAccountSaved, true);
+    }
   }
 
   @override
-  setBool(String setting, bool value)  {
-    _prefs.setBool(setting, value);
-  }
+  bool? getBool(String setting) => _prefs.getBool(setting);
 
   @override
-  remove(String setting) {
-    _prefs.remove(setting);
-  }
+  void setBool(String setting, bool value) => _prefs.setBool(setting, value);
 
   @override
-  void forgetAccount()  {
+  String? getString(String setting) => _prefs.getString(setting);
+
+  @override
+  void setString(String setting, String value) =>
+      _prefs.setString(setting, value);
+
+  @override
+  int? getInt(String setting) => _prefs.getInt(setting);
+
+  @override
+  void setInt(String setting, int value) => _prefs.setInt(setting, value);
+
+  @override
+  void remove(String setting) => _prefs.remove(setting);
+
+  @override
+  void forgetAccount() {
+    _account = null;
     remove(Settings.isAccountSaved);
     remove(Settings.username);
     remove(Settings.password);
     remove(Settings.domain);
     remove(Settings.port);
-    remove(Settings.isAccountSaved);
   }
 
   @override
-  int getInt(String setting)  {
-    return _prefs.getInt(setting);
-  }
+  int getDefaultPort() => 5222;
 
   @override
-  String getString(String setting)  {
-    return _prefs.getString(setting);
-  }
-
-  @override
-  setInt(String setting, int value)  {
-    _prefs.setInt(setting, value);
-  }
-
-
-  @override
-  setString(String setting, String value)  {
-    _prefs.setString(setting, value);
-  }
-
-  @override
-  int getDefaultPort() {
-    return 5222;
-  }
-
-  @override
-  Future isInitialized() {
-    return _initialized.future;
-  }
-
+  Future<bool> isInitialized() => _initialized.future;
 }
-
