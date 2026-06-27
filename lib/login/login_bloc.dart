@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:simple_chat/account/account.dart';
-import 'package:simple_chat/login/login.dart';
+import 'package:simple_chat/login/login_events.dart';
+import 'package:simple_chat/login/login_states.dart';
 import 'package:simple_chat/registration/xmpp_registrar.dart';
 import 'package:simple_chat/service_locator/service_locator.dart';
 import 'package:simple_chat/settings/settings.dart';
-import 'package:xmpp_stone/xmpp_stone.dart';
 
 class LoginBloc extends Bloc<LoginEvent, LoginState> {
   final AccountBloc accountBloc;
@@ -24,68 +24,50 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     on<LoginFailureEvent>(_onLoginFailure);
 
     _initData();
-
-    _accountSub = accountBloc.stream.listen((accountState) {
-      if (accountState is AccountUnregistered) {
-        add(LoginFailureEvent(message: accountState.message));
+    _accountSub = accountBloc.stream.listen((state) {
+      if (state is AccountUnregistered) {
+        add(LoginFailureEvent(message: state.message));
       }
     });
   }
 
-  void _onLoginPressed(
-      LoginButtonPressed event, Emitter<LoginState> emit) {
+  void _onLoginPressed(LoginButtonPressed event, Emitter<LoginState> emit) {
     String username, password, domain;
     int port;
-
     if (_extended) {
       username = event.username;
       password = event.password;
       domain = event.domain;
       port = event.port;
     } else {
-      final jid = Jid.fromFullJid(event.username);
-      username = jid.local;
+      final parts = event.username.split('@');
+      username = parts[0];
+      domain = parts.length > 1 ? parts[1] : '';
       password = event.password;
-      domain = jid.domain;
       port = _settings.getDefaultPort();
     }
-
     if (_rememberMe) {
       _settings.setString(Settings.username, username);
       _settings.setString(Settings.domain, domain);
       _settings.setString(Settings.password, password);
       _settings.setInt(Settings.port, port);
     }
-
-    accountBloc.add(Login(
-      username: username,
-      password: password,
-      domain: domain,
-      port: port,
-    ));
+    accountBloc.add(Login(username: username, password: password, domain: domain, port: port));
     emit(const LoginInitial());
   }
 
-  Future<void> _onRegisterPressed(
-      RegisterButtonPressed event, Emitter<LoginState> emit) async {
+  Future<void> _onRegisterPressed(RegisterButtonPressed event, Emitter<LoginState> emit) async {
     emit(const RegisterLoading());
     try {
-      final registrar = XmppRegistrar(
+      await XmppRegistrar(
         domain: event.domain,
         host: event.domain,
         port: event.port,
         username: event.username,
         password: event.password,
-      );
-      await registrar.register();
+      ).register();
       emit(const RegisterSuccess());
-      // Após registro faz login automaticamente
-      accountBloc.add(Login(
-        username: event.username,
-        password: event.password,
-        domain: event.domain,
-        port: event.port,
-      ));
+      accountBloc.add(Login(username: event.username, password: event.password, domain: event.domain, port: event.port));
     } catch (e) {
       emit(RegisterFailure(message: e.toString().replaceAll('Exception: ', '')));
     }
@@ -97,30 +79,20 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     emit(LoginExtendedChanged(loginExtendValue: _extended));
   }
 
-  void _onRememberMePressed(
-      RememberMePressed event, Emitter<LoginState> emit) {
+  void _onRememberMePressed(RememberMePressed event, Emitter<LoginState> emit) {
     _rememberMe = event.rememberMeValue;
     _settings.setBool(Settings.rememberMe, _rememberMe);
     if (!_rememberMe) accountBloc.add(const ForgetMe());
     emit(RememberMeChanged(rememberMeValue: _rememberMe));
   }
 
-  void _onLoginDataLoaded(
-      LoginDataLoadedEvent event, Emitter<LoginState> emit) {
+  void _onLoginDataLoaded(LoginDataLoadedEvent event, Emitter<LoginState> emit) {
     _rememberMe = event.rememberMe;
     _extended = event.wasExtended;
-    emit(LoginDataLoaded(
-      username: event.username,
-      password: event.password,
-      domain: event.domain,
-      port: event.port,
-      wasExtended: event.wasExtended,
-      rememberMe: event.rememberMe,
-    ));
+    emit(LoginDataLoaded(username: event.username, password: event.password, domain: event.domain, port: event.port, wasExtended: event.wasExtended, rememberMe: event.rememberMe));
   }
 
-  void _onLoginDataShown(
-      LoginDataShownEvent event, Emitter<LoginState> emit) {
+  void _onLoginDataShown(LoginDataShownEvent event, Emitter<LoginState> emit) {
     emit(const LoginInitial());
   }
 
@@ -131,30 +103,15 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   void _initData() {
     _settings.isInitialized().then((_) {
       if (_settings.getBool(Settings.rememberMe) == true) {
-        final username = _settings.getString(Settings.username);
-        final password = _settings.getString(Settings.password);
-        final domain = _settings.getString(Settings.domain);
-        var port = _settings.getInt(Settings.port);
-        port ??= _settings.getDefaultPort();
+        final u = _settings.getString(Settings.username) ?? '';
+        final p = _settings.getString(Settings.password) ?? '';
+        final d = _settings.getString(Settings.domain) ?? '';
+        var port = _settings.getInt(Settings.port) ?? _settings.getDefaultPort();
         final wasExtended = _settings.getBool(Settings.wasExtended) ?? false;
         _extended = wasExtended;
-        add(LoginDataLoadedEvent(
-          username: username ?? '',
-          password: password ?? '',
-          domain: domain ?? '',
-          port: port,
-          wasExtended: wasExtended,
-          rememberMe: true,
-        ));
+        add(LoginDataLoadedEvent(username: u, password: p, domain: d, port: port, wasExtended: wasExtended, rememberMe: true));
       } else {
-        add(LoginDataLoadedEvent(
-          username: '',
-          password: '',
-          domain: '',
-          port: _settings.getDefaultPort(),
-          wasExtended: _settings.getBool(Settings.wasExtended) ?? false,
-          rememberMe: false,
-        ));
+        add(LoginDataLoadedEvent(username: '', password: '', domain: '', port: _settings.getDefaultPort(), wasExtended: _settings.getBool(Settings.wasExtended) ?? false, rememberMe: false));
       }
     });
   }
