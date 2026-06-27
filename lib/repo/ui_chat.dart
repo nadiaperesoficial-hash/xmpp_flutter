@@ -3,70 +3,56 @@ import 'package:rxdart/rxdart.dart';
 import 'package:simple_chat/account/account_repo.dart';
 import 'package:simple_chat/repo/db/db_chat.dart';
 import 'package:simple_chat/repo/ui_message.dart';
-import 'package:xmpp_stone/xmpp_stone.dart';
 
 class UiChat {
   int? dbId;
   String _name = '';
   UiAccount account;
-  late Jid jid;
+  String jid = '';
   UiChatStatus status = UiChatStatus.ACTIVE;
   UiChatType type = UiChatType.SINGLE;
   DateTime created = DateTime.now();
   final List<UiMessage> _messages = [];
   final _messagesSubject = BehaviorSubject<List<UiMessage>>();
-  Chat? _xmppChat;
-  StreamSubscription<Message>? _sub;
 
-  bool get isEmpty => jid.fullJid.isEmpty;
-
-  Chat? get xmppChat => _xmppChat;
-
-  set xmppChat(Chat? value) {
-    _sub?.cancel();
-    _xmppChat = value;
-    if (value != null) _subscribeToMessageStream();
-  }
-
-  @override
-  bool operator ==(other) =>
-      other is UiChat && jid == other.jid && account == other.account;
-
-  @override
-  int get hashCode => Object.hash(jid, account);
-
-  Future<bool> sendMessage(String message) async {
-    if (_xmppChat == null) return false;
-    _xmppChat!.sendMessage(message);
-    return true;
-  }
+  bool get isEmpty => jid.isEmpty;
 
   Stream<List<UiMessage>> get uiMessages => _messagesSubject.stream;
 
-  UiChat.fromXmppChat(this._xmppChat, this.account) {
-    jid = _xmppChat!.jid;
-    _name = jid.fullJid;
+  @override
+  bool operator ==(other) =>
+      other is UiChat && jid == other.jid && account.id == other.account.id;
+
+  @override
+  int get hashCode => Object.hash(jid, account.id);
+
+  UiChat.fromJid(this.jid, this.account) {
+    _name = jid;
     created = DateTime.now();
-    _subscribeToMessageStream();
   }
 
   UiChat.fromDbChat(DbChat dbChat, this.account) {
-    jid = Jid.fromFullJid(dbChat.jid);
+    jid = dbChat.jid;
     dbId = dbChat.uuid;
     _name = dbChat.name;
     status = _statusFromInt(dbChat.status);
     type = _typeFromInt(dbChat.type);
   }
 
-  UiChat.empty() : account = UiAccount(XmppAccount('', '', '', '', 0)) {
-    jid = Jid.fromFullJid('');
+  UiChat.empty() : account = UiAccount(XmppAccount('', '', '', '', 0));
+
+  void addMessage(String body, {required bool fromMe}) {
+    _messages.add(UiMessage(
+      messageBody: body,
+      fromMe: fromMe,
+      timestamp: DateTime.now(),
+    ));
+    _messagesSubject.add(_messages);
   }
 
-  void _subscribeToMessageStream() {
-    _sub = _xmppChat!.newMessageStream.listen((xmppMessage) {
-      _messages.add(UiMessage.fromXmppMessage(xmppMessage));
-      _messagesSubject.add(_messages);
-    });
+  Future<bool> sendMessage(String body) async {
+    addMessage(body, fromMe: true);
+    return true;
   }
 
   UiChatStatus _statusFromInt(int s) {
@@ -77,16 +63,15 @@ class UiChat {
     }
   }
 
-  UiChatType _typeFromInt(int t) {
-    return t == 1 ? UiChatType.MUC : UiChatType.SINGLE;
-  }
+  UiChatType _typeFromInt(int t) =>
+      t == 1 ? UiChatType.MUC : UiChatType.SINGLE;
 
-  String get name => _name.isNotEmpty ? _name : jid.userAtDomain;
+  String get name => _name.isNotEmpty ? _name : jid;
 
   DbChat get getDbChat => DbChat(
         name: name,
         account_id: account.id,
-        jid: jid.fullJid,
+        jid: jid,
         since: created.millisecondsSinceEpoch,
         type: type.index,
         status: status.index,
