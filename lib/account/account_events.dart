@@ -1,12 +1,16 @@
-import 'package:meta/meta.dart';
 import 'package:equatable/equatable.dart';
 import 'package:xmpp_stone/xmpp_stone.dart';
 
 abstract class AccountEvent extends Equatable {
-  AccountEvent([List props = const []]) : super(props);
+  const AccountEvent();
+
+  @override
+  List<Object?> get props => [];
 }
 
 class AppStarted extends AccountEvent {
+  const AppStarted();
+
   @override
   String toString() => 'AppStarted';
 }
@@ -17,43 +21,55 @@ class Login extends AccountEvent {
   final String domain;
   final int port;
 
-  Login(
-      {@required this.username,
-      @required this.password,
-      @required this.domain,
-      @required this.port})
-      : super([username, password, domain, port]);
+  const Login({
+    required this.username,
+    required this.password,
+    required this.domain,
+    required this.port,
+  });
+
+  @override
+  List<Object?> get props => [username, password, domain, port];
 
   @override
   String toString() => 'Login { username: $username }';
 }
 
 class AccountRegisteredEvent extends AccountEvent {
-  XmppAccount account;
+  final XmppAccount? account;
 
-  AccountRegisteredEvent({this.account});
+  const AccountRegisteredEvent({this.account});
+
+  @override
+  List<Object?> get props => [account];
+
   @override
   String toString() => 'AccountRegisteredEvent';
 }
 
 class AccountRegistrationFailedEvent extends AccountEvent {
-  String message;
-  XmppAccount account;
-  AccountRegistrationFailedEvent({this.account, this.message}) : super
-      ([account, message]);
+  final XmppAccount? account;
+  final String? message;
+
+  const AccountRegistrationFailedEvent({this.account, this.message});
+
+  @override
+  List<Object?> get props => [account, message];
 
   @override
   String toString() => 'AccountRegistrationFailedEvent';
 }
 
 class Logout extends AccountEvent {
+  const Logout();
+
   @override
   String toString() => 'Logout';
 }
 
 class ForgetMe extends AccountEvent {
+  const ForgetMe();
+
   @override
-  String toString() {
-    return "DontRememberMe";
-  }
+  String toString() => 'ForgetMe';
 }
