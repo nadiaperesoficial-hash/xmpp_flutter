@@ -1,20 +1,15 @@
-import 'package:xmpp_stone/xmpp_stone.dart';
-
 class UiMessage {
-  String? fromName;
+  final String? messageBody;
+  final bool fromMe;
+  final DateTime timestamp;
   String? fromJid;
-  int? dbId;
-  String? externalId;
-  String? chatExternalId;
-  int? chatDbId;
-  String? messageBody;
-  UiMessageType type;
-  final Message _xmppMessage;
 
-  UiMessage.fromXmppMessage(this._xmppMessage)
-      : type = UiMessageType.TEXT,
-        messageBody = _xmppMessage.body,
-        fromJid = _xmppMessage.fromJid?.fullJid;
+  UiMessage({
+    this.messageBody,
+    required this.fromMe,
+    required this.timestamp,
+    this.fromJid,
+  });
 }
 
 enum UiMessageType { TEXT, DATE }
