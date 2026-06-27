@@ -1,16 +1,14 @@
 import 'package:equatable/equatable.dart';
-import 'package:xmpp_stone/xmpp_stone.dart';
+import 'package:simple_chat/account/account_repo.dart';
 
 abstract class AccountEvent extends Equatable {
   const AccountEvent();
-
   @override
   List<Object?> get props => [];
 }
 
 class AppStarted extends AccountEvent {
   const AppStarted();
-
   @override
   String toString() => 'AppStarted';
 }
@@ -30,19 +28,15 @@ class Login extends AccountEvent {
 
   @override
   List<Object?> get props => [username, password, domain, port];
-
   @override
   String toString() => 'Login { username: $username }';
 }
 
 class AccountRegisteredEvent extends AccountEvent {
   final XmppAccount? account;
-
   const AccountRegisteredEvent({this.account});
-
   @override
   List<Object?> get props => [account];
-
   @override
   String toString() => 'AccountRegisteredEvent';
 }
@@ -50,26 +44,21 @@ class AccountRegisteredEvent extends AccountEvent {
 class AccountRegistrationFailedEvent extends AccountEvent {
   final XmppAccount? account;
   final String? message;
-
   const AccountRegistrationFailedEvent({this.account, this.message});
-
   @override
   List<Object?> get props => [account, message];
-
   @override
   String toString() => 'AccountRegistrationFailedEvent';
 }
 
 class Logout extends AccountEvent {
   const Logout();
-
   @override
   String toString() => 'Logout';
 }
 
 class ForgetMe extends AccountEvent {
   const ForgetMe();
-
   @override
   String toString() => 'ForgetMe';
 }
