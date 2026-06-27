@@ -1,82 +1,87 @@
 import 'package:rxdart/rxdart.dart';
 import 'package:simple_chat/account/account_state.dart';
-import 'package:xmpp_stone/xmpp_stone.dart';
+import 'package:xmpp_plugin/xmpp_plugin.dart';
 
-class AccountRepoImpl implements AccountRepo{
-  final _accountSubject = new BehaviorSubject<List<UiAccount>>();
+abstract class AccountRepo {
+  Stream<List<UiAccount>> get accounts;
+  UiAccount register(XmppAccount account);
+  void unregister(XmppAccount account);
+}
+
+class AccountRepoImpl implements AccountRepo {
+  final _accountSubject = BehaviorSubject<List<UiAccount>>();
+  final List<UiAccount> _accountsList = [];
 
   @override
   Stream<List<UiAccount>> get accounts => _accountSubject.stream;
 
-  List<UiAccount> _accountsList = List<UiAccount>();
-
   @override
   UiAccount register(XmppAccount account) {
-    UiAccount uiAccount = UiAccount(account);
-    _accountsList.retainWhere((item) => item == uiAccount);
+    final uiAccount = UiAccount(account);
+    _accountsList.removeWhere((a) => a == uiAccount);
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
-    var connection = Connection.getInstance(account);
-    connection.connectionStateStream.listen((state) {
-      if (state == XmppConnectionState.DoneServiceDiscovery) {
-        uiAccount.accountState = AccountRegistered(account: account);
-      } else if (state == XmppConnectionState.Closed) {
-        uiAccount.accountState = AccountUnregistered(account: account,
-            message: "Registration Failed"); //nvtd probably should read error
-      }
+
+    XmppPlugin.instance.connect(
+      userJid: '${account.username}@${account.domain}',
+      password: account.password,
+      host: account.domain,
+      port: account.port,
+    ).then((_) {
+      uiAccount.accountState = AccountRegistered(account: account);
+    }).catchError((e) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: e.toString(),
+      );
     });
-    connection.open();
+
     uiAccount.accountState = AccountRegistering(account: account);
     return uiAccount;
   }
 
-
-  close() {
-    _accountSubject.close();
-  }
-
   @override
   void unregister(XmppAccount account) {
-    var connection = Connection.getInstance(account);
-    _accountsList.removeWhere((item) => UiAccount(account) == item);
+    XmppPlugin.instance.disconnect();
+    _accountsList.removeWhere((a) => UiAccount(account) == a);
     _accountSubject.add(_accountsList);
-    connection.close();
   }
-
-
 }
 
-abstract class AccountRepo {
-  Stream<List<UiAccount>> get accounts;
+class XmppAccount {
+  final String username;
+  final String fullJid;
+  final String domain;
+  final String password;
+  final int port;
 
-  UiAccount register(XmppAccount account);
-
-  void unregister(XmppAccount account);
+  XmppAccount(
+    this.username,
+    this.fullJid,
+    this.domain,
+    this.password,
+    this.port,
+  );
 }
 
 class UiAccount {
-  XmppAccount account;
-  final _accountStateSubject = new BehaviorSubject<AccountState>();
-  Stream<AccountState> get accountStateStream => _accountStateSubject.stream;
+  final XmppAccount account;
+  final _stateSubject = BehaviorSubject<AccountState>();
 
-  String get id => "${account.username}@${account.domain}";
+  Stream<AccountState> get accountStateStream => _stateSubject.stream;
 
+  String get id => '${account.username}@${account.domain}';
 
-  set accountState(AccountState state) {
-    _accountStateSubject.add(state);
-  }
+  set accountState(AccountState state) => _stateSubject.add(state);
 
   @override
-  bool operator ==(other) {
-    return other is UiAccount &&
-        account.username == other.account.username &&
-        account.domain == other.account.domain;
-  }
+  bool operator ==(other) =>
+      other is UiAccount &&
+      account.username == other.account.username &&
+      account.domain == other.account.domain;
+
+  @override
+  int get hashCode => Object.hash(account.username, account.domain);
 
   UiAccount(this.account);
-}
-
-
-enum UiAccountState {
-  UNINITIALIZED, REGISTERING, REGISTERED, REGISTRATION_FAILED
 }
