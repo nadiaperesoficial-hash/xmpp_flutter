@@ -11,14 +11,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout app
-        uses: actions/checkout@v4
-
       - name: Checkout xmpp_dart
         uses: actions/checkout@v4
         with:
           repository: vukoye/xmpp_dart
           path: xmpp_dart
+
+      - name: Checkout app
+        uses: actions/checkout@v4
+        with:
+          path: app
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -33,17 +35,20 @@ jobs:
           channel: stable
 
       - name: Get dependencies
+        working-directory: app
         run: flutter pub get
 
       - name: Analyze
+        working-directory: app
         run: flutter analyze --no-fatal-infos
 
       - name: Build APK
+        working-directory: app
         run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: simple-chat-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7
