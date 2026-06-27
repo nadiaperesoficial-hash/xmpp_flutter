@@ -2,241 +2,156 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:simple_chat/repo/ui_chat.dart';
 import 'package:simple_chat/roster/roster_repo.dart';
-
-import 'main_page.dart';
-
-
-
-
-class MainPageTabBar extends StatelessWidget {
-
-  MainPageBloc _mainPageBloc = MainPageBloc();
-
-  @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text('Persistent Tab Demo'),
-        ),
-        body: TabBarView(
-          children: [
-            RosterPage(mainPageBloc: _mainPageBloc),
-            ChatListPage(mainPageBloc: _mainPageBloc),
-          ],
-        ),
-      ),
-    );
-  }
-}
+import 'main_page_bloc.dart';
+import 'main_page_event.dart';
+import 'main_page_state.dart';
 
 class RosterPage extends StatefulWidget {
   final MainPageBloc mainPageBloc;
+  const RosterPage({Key? key, required this.mainPageBloc}) : super(key: key);
 
   @override
-  State<StatefulWidget> createState() {
-    // TODO: implement createState
-    return _RosterPageState();
-  }
-
-  RosterPage({
-    Key key,
-    @required this.mainPageBloc,
-  });
+  State<RosterPage> createState() => _RosterPageState();
 }
 
 class _RosterPageState extends State<RosterPage> {
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<MainPageEvent, MainPageState>(
+    return BlocBuilder<MainPageBloc, MainPageState>(
       bloc: widget.mainPageBloc,
-      builder: (BuildContext context, MainPageState state) {
+      builder: (context, state) {
         if (state is MainPageRosterList) {
+          if (state.activeList.isEmpty) {
+            return const Center(child: Text('Nenhum contato ainda'));
+          }
           return ListView.builder(
-              padding: EdgeInsets.all(1.0),
-              itemBuilder: (context, index) =>
-                  buildItem(context, state.activeList[index]),
-              itemCount: state.activeList.length);
-        } else {
-          return Container();
+            padding: const EdgeInsets.all(1),
+            itemCount: state.activeList.length,
+            itemBuilder: (context, index) =>
+                _buildRosterItem(context, state.activeList[index]),
+          );
         }
+        return const SizedBox.shrink();
       },
     );
   }
 
-  Widget buildItem(BuildContext context, UiBuddy buddy) {
-    Widget image;
-    if (buddy.vCard?.imageData == null) {
-      image = CircleAvatar(
-          radius: 25,
-          child: buddy.name != null && buddy.name.isNotEmpty
-          ? Text(buddy.name[0])
-          : Text("X", style: TextStyle(color: Colors.black87)));
-    } else {
-      image = CircleAvatar(
-        radius: 25,
-          backgroundImage: MemoryImage(
-        buddy.vCard.imageData,
-      ));
-//      image = new Container(
-//        height: 30.0,
-//        width: 30.0,
-//        decoration: new BoxDecoration(
-//          color: const Color(0xff7c94b6),
-//          borderRadius: BorderRadius.all(const Radius.circular(50.0)),
-//          border: Border.all(color: const Color(0xFF28324E)),
-//          // image: new Image.asset(_image.)
-//        ),
-//        child: Image.memory(
-//        buddy.vCard.imageData,
-//      ),
-//      );
-    }
+  Widget _buildRosterItem(BuildContext context, UiBuddy buddy) {
+    final Widget avatar = buddy.vCard?.imageData == null
+        ? CircleAvatar(
+            radius: 25,
+            child: Text(
+              buddy.name.isNotEmpty ? buddy.name[0].toUpperCase() : '?',
+              style: const TextStyle(color: Colors.white),
+            ),
+          )
+        : CircleAvatar(
+            radius: 25,
+            backgroundImage: MemoryImage(buddy.vCard!.imageData!),
+          );
 
     return Container(
+      margin: const EdgeInsets.only(bottom: 8, left: 4, right: 4),
       child: Row(
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.only(left:8.0),
-            child: image,
-          ),
+        children: [
+          Padding(padding: const EdgeInsets.only(left: 8), child: avatar),
+          const SizedBox(width: 8),
           Flexible(
-            child: Container(
-              child: Column(
-                children: <Widget>[
-                  Container(
-                    child: Text(
-                      '${buddy.name ?? 'No Info'}',
-                      style: TextStyle(fontWeight: FontWeight.bold, color:
-                      Colors
-                          .black87),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    margin: EdgeInsets.fromLTRB(8.0, 0.0, 0.0, 4.0),
-                  ),
-                  Container(
-                    child: Text(
-                      '${buddy.jid.fullJid}',
-                      style: TextStyle(color: Colors.black87),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    margin: EdgeInsets.fromLTRB(8.0, 0.0, 0.0, 0.0),
-                  )
-                ],
-              ),
-              margin: EdgeInsets.only(left: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  buddy.name.isNotEmpty ? buddy.name : 'Sem nome',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+                Text(
+                  buddy.jid.fullJid,
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                ),
+              ],
             ),
           ),
         ],
       ),
-      margin: EdgeInsets.only(bottom: 8.0, left: 4.0, right: 4.0),
     );
   }
 }
 
 class ChatListPage extends StatefulWidget {
   final MainPageBloc mainPageBloc;
+  const ChatListPage({Key? key, required this.mainPageBloc}) : super(key: key);
 
   @override
-  State<StatefulWidget> createState() {
-    // TODO: implement createState
-    return _ChatListPageState();
-  }
-
-  ChatListPage({
-    Key key,
-    @required this.mainPageBloc,
-  });
+  State<ChatListPage> createState() => _ChatListPageState();
 }
 
 class _ChatListPageState extends State<ChatListPage> {
   @override
   Widget build(BuildContext context) {
-    print('build _ChatListPageState');
-    // TODO: implement build
-    return BlocBuilder<MainPageEvent, MainPageState>(
+    return BlocBuilder<MainPageBloc, MainPageState>(
       bloc: widget.mainPageBloc,
-      builder: (BuildContext context, MainPageState state) {
+      builder: (context, state) {
         if (state is MainPageChatList) {
+          if (state.activeList.isEmpty) {
+            return const Center(child: Text('Nenhuma conversa ainda'));
+          }
           return ListView.builder(
-              padding: EdgeInsets.all(10.0),
-              itemBuilder: (context, index) =>
-                  buildItem(context, state.activeList[index]),
-              itemCount: state.activeList.length);
-        } else {
-          return Container();
+            padding: const EdgeInsets.all(10),
+            itemCount: state.activeList.length,
+            itemBuilder: (context, index) =>
+                _buildChatItem(context, state.activeList[index]),
+          );
         }
+        return const SizedBox.shrink();
       },
     );
   }
 
-  Widget buildItem(BuildContext context, UiChat chatItem) {
-    Widget image;
-    //if (buddy.vCard?.imageData == null) {
-    image = chatItem.name != null && chatItem.name.isNotEmpty
-        ? Text(chatItem.name[0])
-        : Text("X", style: TextStyle(color: Colors.black87));
-    //} else {
-    //image = Image.memory(buddy.vCard.imageData, width: 25, height: 25,);
-    //}
-
+  Widget _buildChatItem(BuildContext context, UiChat chatItem) {
     return Container(
-      child: FlatButton(
+      margin: const EdgeInsets.only(bottom: 10, left: 5, right: 5),
+      child: TextButton(
+        style: TextButton.styleFrom(
+          backgroundColor: Colors.grey[200],
+          padding: const EdgeInsets.fromLTRB(25, 10, 25, 10),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10)),
+        ),
+        onPressed: () {
+          // TODO: navegar para tela de chat
+        },
         child: Row(
-          children: <Widget>[
-            Material(
-              child: CircleAvatar(
-                minRadius: 25,
-                maxRadius: 25,
-                child: image,
+          children: [
+            CircleAvatar(
+              radius: 25,
+              child: Text(
+                chatItem.name.isNotEmpty
+                    ? chatItem.name[0].toUpperCase()
+                    : '?',
+                style: const TextStyle(color: Colors.white),
               ),
-              borderRadius: BorderRadius.all(Radius.circular(5.0)),
-              clipBehavior: Clip.hardEdge,
             ),
+            const SizedBox(width: 20),
             Flexible(
-              child: Container(
-                child: Column(
-                  children: <Widget>[
-                    Container(
-                      child: Text(
-                        'Name: ${chatItem.name ?? 'No Info'}',
-                        style: TextStyle(color: Colors.black87),
-                      ),
-                      alignment: Alignment.centerLeft,
-                      margin: EdgeInsets.fromLTRB(10.0, 0.0, 0.0, 5.0),
-                    ),
-                    Container(
-                      child: Text(
-                        'Jid: ${chatItem.jid.fullJid}',
-                        style: TextStyle(color: Colors.black87),
-                      ),
-                      alignment: Alignment.centerLeft,
-                      margin: EdgeInsets.fromLTRB(10.0, 0.0, 0.0, 0.0),
-                    )
-                  ],
-                ),
-                margin: EdgeInsets.only(left: 20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    chatItem.name.isNotEmpty ? chatItem.name : 'Sem nome',
+                    style: const TextStyle(color: Colors.black87),
+                  ),
+                  Text(
+                    chatItem.jid.fullJid,
+                    style: const TextStyle(
+                        color: Colors.black54, fontSize: 12),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        onPressed: () {
-          //todo handle press
-//          Navigator.push(
-//              context,
-//              MaterialPageRoute(
-//                  builder: (context) =>
-//                      Chat(
-//                        buddy : buddy
-//                      )));
-        },
-        color: Colors.grey,
-        padding: EdgeInsets.fromLTRB(25.0, 10.0, 25.0, 10.0),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.0)),
       ),
-      margin: EdgeInsets.only(bottom: 10.0, left: 5.0, right: 5.0),
     );
   }
 }
