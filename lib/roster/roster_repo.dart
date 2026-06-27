@@ -1,140 +1,86 @@
 import 'dart:async';
-
-import 'package:image/image.dart';
-import 'package:meta/meta.dart';
 import 'package:rxdart/rxdart.dart';
-import 'package:simple_chat/account/account.dart';
 import 'package:simple_chat/account/account_repo.dart';
-import 'package:simple_chat/repo/ui_chat.dart';
+import 'package:simple_chat/account/account_state.dart';
 import 'package:simple_chat/service_locator/service_locator.dart';
-import 'package:xmpp_stone/xmpp_stone.dart' as xmpp;
+import 'package:xmpp_plugin/xmpp_plugin.dart';
 
 abstract class RosterRepo {
   Stream<List<UiBuddy>> get rosterStream;
-
-  close();
+  void close();
 }
 
 class UiBuddy {
-  UiAccount account;
-  xmpp.Buddy xmppBuddy;
-  xmpp.VCard vCard;
-  bool vCardRequested = false;
+  final UiAccount account;
+  final String jidString;
+  final String name;
+  VCardData? vCard;
 
-  String get name => xmppBuddy.name;
+  String get fullJid => jidString;
 
-  xmpp.Jid get jid => xmppBuddy.jid;
-
-  Image get avatar => vCard?.image;
-
-  UiBuddy({@required this.xmppBuddy, @required this.account});
+  UiBuddy({
+    required this.account,
+    required this.jidString,
+    required this.name,
+  });
 }
 
-class RosterVcardManager {
-  xmpp.RosterManager rosterManager;
-  xmpp.VCardManager vCardManager;
-
-  RosterVcardManager(this.rosterManager, this.vCardManager);
+class VCardData {
+  final List<int>? imageData;
+  VCardData({this.imageData});
 }
 
 class RosterRepoImpl implements RosterRepo {
   final _accountRepo = sl.get<AccountRepo>();
-  List<UiBuddy> _rosterList = List<UiBuddy>();
+  final List<UiBuddy> _rosterList = [];
+  final _rosterSubject = BehaviorSubject<List<UiBuddy>>();
+  final Map<UiAccount, StreamSubscription> _accounts = {};
 
-  final _rosterSubject = new BehaviorSubject<List<UiBuddy>>();
-  Map<UiAccount, StreamSubscription> _accounts =
-      Map<UiAccount, StreamSubscription>();
-  Map<UiAccount, RosterVcardManager> _managers =
-      Map<UiAccount, RosterVcardManager>();
-
-  Map<xmpp.ChatManager, StreamSubscription> _rosterManagerStreams =
-      Map<xmpp.ChatManager, StreamSubscription>();
+  @override
+  Stream<List<UiBuddy>> get rosterStream => _rosterSubject.stream;
 
   RosterRepoImpl() {
-    _accountRepo.accounts.listen((accounts) => _accountsListChanged(accounts));
+    _accountRepo.accounts.listen(_accountsListChanged);
   }
 
-  _accountsListChanged(List<UiAccount> accounts) {
-    accounts.forEach((acc) {
-      if (!_accounts.keys.contains(acc)) {
-        // ignore: cancel_subscriptions
-        var sub = acc.accountStateStream.listen((state) {
+  void _accountsListChanged(List<UiAccount> accounts) {
+    for (final acc in accounts) {
+      if (!_accounts.containsKey(acc)) {
+        final sub = acc.accountStateStream.listen((state) {
           if (state is AccountRegistered) {
-            _addRosterManager(acc);
+            _loadRoster(acc);
           }
         });
         _accounts[acc] = sub;
       }
-    });
-    List<UiAccount> toRemove = List<UiAccount>();
-    _accounts.keys.forEach((oldAcc) {
-      if (!accounts.contains(oldAcc)) {
-        toRemove.add(oldAcc);
-      }
-    });
-    toRemove.forEach((acc) {
-      _accounts[acc].cancel();
+    }
+    final toRemove =
+        _accounts.keys.where((a) => !accounts.contains(a)).toList();
+    for (final acc in toRemove) {
+      _accounts[acc]?.cancel();
       _accounts.remove(acc);
-      _removeManagers(acc);
-    });
-  }
-
-  @override
-  close() {
-    _rosterSubject.close();
-  }
-
-  @override
-  // TODO: implement rosterStream
-  Stream<List<UiBuddy>> get rosterStream => _rosterSubject.stream;
-
-  void _addRosterManager(UiAccount acc) {
-    if (!_managers.containsKey(acc)) {
-      xmpp.Connection connection = xmpp.Connection.getInstance(acc.account);
-      xmpp.RosterManager rosterManager =
-          xmpp.RosterManager.getInstance(connection);
-      xmpp.VCardManager vCardManager =
-          xmpp.VCardManager.getInstance(connection);
-      _managers[acc] = RosterVcardManager(rosterManager, vCardManager);
-      if (rosterManager.getRoster().isNotEmpty) {
-        _rosterChangedForManager(acc, rosterManager, rosterManager.getRoster());
-      }
-      rosterManager.rosterStream.listen((roster) {
-        _rosterChangedForManager(acc, rosterManager, roster);
-      });
+      _rosterList.removeWhere((b) => b.account.id == acc.id);
+      _rosterSubject.add(_rosterList);
     }
   }
 
-  void _rosterChangedForManager(
-      UiAccount acc, xmpp.RosterManager manager, List<xmpp.Buddy> roster) {
-    roster.forEach((xmppBuddy) {
-      var existing = _rosterList.firstWhere(
-          (uiBuddy) =>
-              xmppBuddy.jid == uiBuddy?.xmppBuddy?.jid &&
-              acc.id == uiBuddy.account.id,
-          orElse: () => null);
-      if (existing == null) {
-        var tempBuddy = UiBuddy(xmppBuddy: xmppBuddy, account: acc);
-        fetchVcard(acc, xmppBuddy.jid, tempBuddy);
-        _rosterList.add(tempBuddy);
-        _rosterSubject.add(_rosterList);
-      } else if (existing != null &&
-          existing.vCard == null &&
-          !existing.vCardRequested) {
-        fetchVcard(acc, xmppBuddy.jid, existing);
+  Future<void> _loadRoster(UiAccount acc) async {
+    final contacts = await XmppPlugin.instance.getRoster();
+    for (final contact in contacts) {
+      final exists = _rosterList.any((b) =>
+          b.jidString == contact.jid && b.account.id == acc.id);
+      if (!exists) {
+        final buddy = UiBuddy(
+          account: acc,
+          jidString: contact.jid ?? '',
+          name: contact.name ?? contact.jid ?? '',
+        );
+        _rosterList.add(buddy);
       }
-    });
+    }
+    _rosterSubject.add(_rosterList);
   }
 
-  void fetchVcard(UiAccount acc, xmpp.Jid jid, UiBuddy uiBuddy) {
-    _managers[acc].vCardManager?.getVCardFor(jid)?.then((vcard) {
-      uiBuddy.vCardRequested = true;
-      if (vcard != null) uiBuddy.vCard = vcard;
-      _rosterSubject.add(_rosterList);
-    });
-  }
-
-  void _removeManagers(UiAccount oldAcc) {
-    _managers.remove(oldAcc);
-  }
+  @override
+  void close() => _rosterSubject.close();
 }
