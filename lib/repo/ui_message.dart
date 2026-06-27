@@ -1,23 +1,20 @@
-import 'package:image/image.dart' as img;
 import 'package:xmpp_stone/xmpp_stone.dart';
 
 class UiMessage {
-  String fromName;
-  String fromJid;
-  int dbId;
-  String externalId;
-  String chatExternalId;
-  int chatDbId;
-  String messageBody;
-  img.Image avatar;
+  String? fromName;
+  String? fromJid;
+  int? dbId;
+  String? externalId;
+  String? chatExternalId;
+  int? chatDbId;
+  String? messageBody;
   UiMessageType type;
-  Message _xmppMessage;
+  final Message _xmppMessage;
 
-  UiMessage.fromXmppMessage(this._xmppMessage);
-
-
+  UiMessage.fromXmppMessage(this._xmppMessage)
+      : type = UiMessageType.TEXT,
+        messageBody = _xmppMessage.body,
+        fromJid = _xmppMessage.fromJid?.fullJid;
 }
 
-enum UiMessageType {
-  TEXT, DATE
-}
+enum UiMessageType { TEXT, DATE }
