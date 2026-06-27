@@ -1,10 +1,8 @@
-import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:simple_chat/account/account.dart';
 import 'package:simple_chat/account/account_repo.dart';
 import 'package:simple_chat/service_locator/service_locator.dart';
 import 'package:simple_chat/settings/settings.dart';
-import 'package:xmpp_stone/xmpp_stone.dart' as xmpp;
 
 class AccountBloc extends Bloc<AccountEvent, AccountState> {
   final settings = sl.get<Settings>();
@@ -19,11 +17,10 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
     on<AccountRegistrationFailedEvent>(_onAccountRegistrationFailed);
   }
 
-  Future<void> _onAppStarted(
-      AppStarted event, Emitter<AccountState> emit) async {
+  Future<void> _onAppStarted(AppStarted event, Emitter<AccountState> emit) async {
     await settings.isInitialized();
-    final shouldStart = settings.getBool(Settings.isAccountSaved) &&
-        settings.getBool(Settings.wasLoggedIn);
+    final shouldStart = (settings.getBool(Settings.isAccountSaved) ?? false) &&
+        (settings.getBool(Settings.wasLoggedIn) ?? false);
     if (shouldStart) {
       final account = settings.getAccountData();
       if (account == null) {
@@ -38,12 +35,8 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
   }
 
   void _onLogin(Login event, Emitter<AccountState> emit) {
-    final account = xmpp.XmppAccount(
-      event.username,
-      event.username,
-      event.domain,
-      event.password,
-      event.port,
+    final account = XmppAccount(
+      event.username, event.username, event.domain, event.password, event.port,
     );
     emit(AccountRegistering(account: account));
     _registerAccount(account);
@@ -60,23 +53,20 @@ class AccountBloc extends Bloc<AccountEvent, AccountState> {
     settings.forgetAccount();
   }
 
-  void _onAccountRegistered(
-      AccountRegisteredEvent event, Emitter<AccountState> emit) {
+  void _onAccountRegistered(AccountRegisteredEvent event, Emitter<AccountState> emit) {
     settings.setBool(Settings.wasLoggedIn, true);
     emit(AccountRegistered(account: event.account));
   }
 
-  void _onAccountRegistrationFailed(
-      AccountRegistrationFailedEvent event, Emitter<AccountState> emit) {
+  void _onAccountRegistrationFailed(AccountRegistrationFailedEvent event, Emitter<AccountState> emit) {
     emit(AccountUnregistered(account: event.account, message: event.message));
   }
 
-  void _registerAccount(xmpp.XmppAccount account) {
+  void _registerAccount(XmppAccount account) {
     settings.setAccountData(account);
     accountRepo.register(account).accountStateStream.listen((state) {
       if (state is AccountUnregistered) {
-        add(AccountRegistrationFailedEvent(
-            account: account, message: state.message));
+        add(AccountRegistrationFailedEvent(account: account, message: state.message));
       } else if (state is AccountRegistered) {
         add(AccountRegisteredEvent(account: account));
       }
