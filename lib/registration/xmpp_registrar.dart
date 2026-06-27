@@ -20,36 +20,39 @@ class XmppRegistrar {
   Future<void> register() async {
     Socket? socket;
     try {
-      socket = await SecureSocket.connect(
-        host,
-        port,
-        onBadCertificate: (_) => true, // aceita cert auto-assinado
-        timeout: const Duration(seconds: 10),
-      );
+      try {
+        socket = await SecureSocket.connect(
+          host, port,
+          onBadCertificate: (_) => true,
+          timeout: const Duration(seconds: 10),
+        );
+      } catch (_) {
+        socket = await Socket.connect(
+          host, port,
+          timeout: const Duration(seconds: 10),
+        );
+      }
 
       final completer = Completer<void>();
       final buffer = StringBuffer();
-      String _stage = 'open';
+      String stage = 'open';
 
       socket.listen(
         (data) {
-          final chunk = utf8.decode(data, allowMalformed: true);
-          buffer.write(chunk);
+          buffer.write(utf8.decode(data, allowMalformed: true));
           final xml = buffer.toString();
 
-          if (_stage == 'open' && xml.contains('stream:features')) {
-            // Pede campos de registro
-            _stage = 'get_fields';
+          if (stage == 'open' && xml.contains('stream:features')) {
+            stage = 'get_fields';
             buffer.clear();
             socket!.write(
               '<iq type="get" id="reg1">'
               '<query xmlns="jabber:iq:register"/>'
               '</iq>',
             );
-          } else if (_stage == 'get_fields' &&
+          } else if (stage == 'get_fields' &&
               xml.contains('jabber:iq:register')) {
-            // Envia registro
-            _stage = 'registering';
+            stage = 'registering';
             buffer.clear();
             socket!.write(
               '<iq type="set" id="reg2">'
@@ -59,13 +62,12 @@ class XmppRegistrar {
               '</query>'
               '</iq>',
             );
-          } else if (_stage == 'registering') {
+          } else if (stage == 'registering') {
             if (xml.contains('type="result"')) {
               if (!completer.isCompleted) completer.complete();
             } else if (xml.contains('type="error"')) {
-              final msg = _parseError(xml);
               if (!completer.isCompleted) {
-                completer.completeError(Exception(msg));
+                completer.completeError(Exception(_parseError(xml)));
               }
             }
           }
@@ -75,12 +77,12 @@ class XmppRegistrar {
         },
         onDone: () {
           if (!completer.isCompleted) {
-            completer.completeError(Exception('Conexão encerrada inesperadamente'));
+            completer.completeError(
+                Exception('Conexão encerrada inesperadamente'));
           }
         },
       );
 
-      // Abre stream XMPP
       socket.write(
         "<?xml version='1.0'?>"
         "<stream:stream xmlns='jabber:client' "
