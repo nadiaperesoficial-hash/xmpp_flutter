@@ -1,68 +1,73 @@
-import 'package:meta/meta.dart';
 import 'package:equatable/equatable.dart';
 
 abstract class LoginState extends Equatable {
-  LoginState([List props = const []]) : super(props);
-}
-
-class LoginDataLoaded extends LoginState {
-  String username;
-  String password;
-  String domain;
-  int port;
-  bool wasExtended;
-  bool rememberMe;
-  String authMessage;
-
+  const LoginState();
   @override
-  String toString() => 'LoginDataLoaded';
-
-  LoginDataLoaded(
-      {this.username,
-      this.password,
-      this.domain,
-      this.port,
-      this.wasExtended,
-      this.rememberMe,
-      this.authMessage});
+  List<Object?> get props => [];
 }
 
 class LoginInitial extends LoginState {
-  @override
-  String toString() => 'LoginInitial';
+  const LoginInitial();
 }
 
 class LoginLoading extends LoginState {
-  @override
-  String toString() => 'LoginLoading';
+  const LoginLoading();
 }
 
 class LoginExtendedChanged extends LoginState {
-  bool loginExtendValue;
-
-  LoginExtendedChanged({@required this.loginExtendValue})
-      : super([loginExtendValue]);
-
+  final bool loginExtendValue;
+  const LoginExtendedChanged({required this.loginExtendValue});
   @override
-  String toString() => 'LoginExtendedChanged';
+  List<Object?> get props => [loginExtendValue];
 }
 
 class RememberMeChanged extends LoginState {
-  bool loginExtendValue;
-  bool rememberMeValue;
-
-  RememberMeChanged({@required this.rememberMeValue})
-      : super([rememberMeValue]);
-
+  final bool rememberMeValue;
+  const RememberMeChanged({required this.rememberMeValue});
   @override
-  String toString() => 'RememberMeChanged';
+  List<Object?> get props => [rememberMeValue];
 }
 
-class LoginFailureState extends LoginState {
-  final String error;
+class LoginDataLoaded extends LoginState {
+  final String username;
+  final String password;
+  final String domain;
+  final int port;
+  final bool wasExtended;
+  final bool rememberMe;
 
-  LoginFailureState({@required this.error}) : super([error]);
+  const LoginDataLoaded({
+    required this.username,
+    required this.password,
+    required this.domain,
+    required this.port,
+    required this.wasExtended,
+    required this.rememberMe,
+  });
 
   @override
-  String toString() => 'LoginFailure { error: $error }';
+  List<Object?> get props =>
+      [username, password, domain, port, wasExtended, rememberMe];
+}
+
+class LoginFailure extends LoginState {
+  final String? message;
+  const LoginFailure({this.message});
+  @override
+  List<Object?> get props => [message];
+}
+
+class RegisterLoading extends LoginState {
+  const RegisterLoading();
+}
+
+class RegisterSuccess extends LoginState {
+  const RegisterSuccess();
+}
+
+class RegisterFailure extends LoginState {
+  final String message;
+  const RegisterFailure({required this.message});
+  @override
+  List<Object?> get props => [message];
 }
