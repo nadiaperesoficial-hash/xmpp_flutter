@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:simple_chat/login/login_bloc.dart';
 import 'package:simple_chat/login/login_event.dart';
 import 'package:simple_chat/login/login_state.dart';
+import 'package:simple_chat/main_page/main_page_widget.dart'; // ← import para MainPage.TAG
 
 const List<Map<String, dynamic>> kPublicServers = [
   {'name': 'xmpp.jp', 'domain': 'xmpp.jp', 'port': 5222},
@@ -127,10 +128,10 @@ class _LoginFormState extends State<LoginForm> {
           _authMessage = null;
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conta criada! Entrando...'), backgroundColor: Colors.green));
         } else if (state is LoginSuccess) {
-          // Navega para a tela principal
-          Navigator.pushReplacementNamed(context, '/main');
+          // 🔽 NAVEGAÇÃO CORRETA usando MainPage.TAG
+          Navigator.pushReplacementNamed(context, MainPage.TAG);
         } else if (state is LoginLoading) {
-          _authMessage = null; // limpa mensagens antigas
+          _authMessage = null;
         }
       },
       builder: (context, state) {
