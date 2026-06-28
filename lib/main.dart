@@ -20,8 +20,6 @@ class MyApp extends StatefulWidget {
 
 class _AppState extends State<MyApp> {
   late AccountBloc accountBloc;
-  final GlobalKey<NavigatorState> navigatorKey =
-      GlobalKey(debugLabel: 'Main Navigator');
 
   @override
   void initState() {
@@ -38,28 +36,18 @@ class _AppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<AccountBloc, AccountState>(
-      bloc: accountBloc,
-      listener: (context, state) {
-        if (state is AccountUninitialized || state is AccountUnregistered) {
-          navigatorKey.currentState
-              ?.pushNamedAndRemoveUntil(LoginPage.tag, (_) => false);
-        } else if (state is AccountRegistered) {
-          navigatorKey.currentState
-              ?.pushNamedAndRemoveUntil(MainPage.TAG, (_) => false);
-        } else if (state is AccountRegistering) {
-          navigatorKey.currentState
-              ?.pushNamedAndRemoveUntil(LoginPage.tag, (_) => false);
-        }
-      },
+    return BlocProvider<AccountBloc>(
+      create: (_) => accountBloc,
       child: MaterialApp(
-        navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
-        initialRoute: LoginPage.tag,
-        routes: {
-          LoginPage.tag: (_) => LoginPage(accountBloc),
-          MainPage.TAG: (_) => MainPage(accountBloc),
-        },
+        home: BlocBuilder<AccountBloc, AccountState>(
+          builder: (context, state) {
+            if (state is AccountRegistered) {
+              return MainPage(accountBloc);
+            }
+            return LoginPage(accountBloc);
+          },
+        ),
       ),
     );
   }
