@@ -3,6 +3,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:simple_chat/account/account_repo.dart';
 import 'package:simple_chat/repo/db/db_chat.dart';
 import 'package:simple_chat/repo/ui_message.dart';
+import 'package:whixp/whixp.dart'; // Garante o acesso à classe JabberID do pacote
 
 class UiChat {
   int? dbId;
@@ -52,11 +53,13 @@ class UiChat {
   Future<bool> sendMessage(String body) async {
     final client = account.client;
     if (client == null) return false;
-    
-    // CORRIGIDO: O JID agora é passado como o primeiro argumento posicional.
-    // O parâmetro 'body' continua nomeado como exigido pelo whixp.
-    client.sendMessage(jid, body: body);
-    
+
+    // CORRIGIDO: Convertendo a String jid em um objeto JabberID nativo do whixp
+    final targetJid = JabberID(jid);
+
+    // O método agora recebe o objeto JabberID esperado tipicamente pelo pacote
+    client.sendMessage(targetJid, body: body);
+
     addMessage(body, fromMe: true);
     return true;
   }
