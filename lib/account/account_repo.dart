@@ -66,16 +66,22 @@ class AccountRepoImpl implements AccountRepo {
     uiAccount._client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    client.addEventHandler<ConnectionState>('connectionState', (state) {
-      if (state == ConnectionState.connected) {
-        uiAccount.accountState = AccountRegistered(account: account);
-      } else if (state == ConnectionState.disconnected ||
-          state == ConnectionState.error) {
-        uiAccount.accountState = AccountUnregistered(
-          account: account,
-          message: 'Falha na conexão',
-        );
-      }
+    client.addEventHandler<dynamic>('streamNegotiated', (_) {
+      uiAccount.accountState = AccountRegistered(account: account);
+    });
+
+    client.addEventHandler<dynamic>('disconnected', (_) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: 'Conexão encerrada',
+      );
+    });
+
+    client.addEventHandler<dynamic>('connectionFailed', (_) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: 'Falha na conexão',
+      );
     });
 
     client.connect();
@@ -85,12 +91,11 @@ class AccountRepoImpl implements AccountRepo {
   @override
   void unregister(XmppAccount account) {
     final id = '${account.username}@${account.domain}';
-    final uiAccount = _accountsList.firstWhere(
-      (a) => a.id == id,
-      orElse: () => UiAccount(account),
-    );
-    uiAccount._client?.disconnect();
-    _accountsList.removeWhere((a) => a.id == id);
+    final idx = _accountsList.indexWhere((a) => a.id == id);
+    if (idx != -1) {
+      _accountsList[idx]._client?.disconnect();
+      _accountsList.removeAt(idx);
+    }
     _accountSubject.add(_accountsList);
   }
 }
