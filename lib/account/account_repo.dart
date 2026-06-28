@@ -1,35 +1,10 @@
-// ============================================================
-// account_state.dart – Definições de estado (coloque em um arquivo separado)
-// ============================================================
-import 'package:simple_chat/account/account_repo.dart'; // ajuste o import
-
-abstract class AccountState {}
-
-class AccountRegistering extends AccountState {
-  final XmppAccount account;
-  AccountRegistering({required this.account});
-}
-
-class AccountRegistered extends AccountState {
-  final XmppAccount account;
-  AccountRegistered({required this.account});
-}
-
-class AccountUnregistered extends AccountState {
-  final XmppAccount account;
-  final String message;
-  AccountUnregistered({required this.account, required this.message});
-}
-
-// ============================================================
-// account_repo.dart – Implementação completa
-// ============================================================
+// account_repo.dart
 import 'dart:async';
 import 'package:rxdart/rxdart.dart';
-import 'package:simple_chat/account/account_state.dart';
+import 'package:simple_chat/account/account_state.dart'; // onde estão as classes de estado
 import 'package:whixp/whixp.dart';
 
-// ---------- Classes de modelo ----------
+// ----- Classes de modelo (mantidas como estavam) -----
 class XmppAccount {
   final String username;
   final String fullJid;
@@ -63,7 +38,7 @@ class UiAccount {
   UiAccount(this.account);
 }
 
-// ---------- Repositório ----------
+// ----- Repositório abstrato (mantido) -----
 abstract class AccountRepo {
   Stream<List<UiAccount>> get accounts;
   UiAccount register(XmppAccount account);
@@ -71,6 +46,7 @@ abstract class AccountRepo {
   Future<bool> criarNovaContaNoServidor(XmppAccount account);
 }
 
+// ----- Implementação corrigida -----
 class AccountRepoImpl implements AccountRepo {
   final _accountSubject = BehaviorSubject<List<UiAccount>>();
   final List<UiAccount> _accountsList = [];
@@ -78,44 +54,28 @@ class AccountRepoImpl implements AccountRepo {
   @override
   Stream<List<UiAccount>> get accounts => _accountSubject.stream;
 
-  // ---- Resolução de host/porta para servidores conhecidos ----
+  // --- Auxiliar para resolver host/porta para servidores específicos ---
   _ConnectionSettings _resolveSettings(XmppAccount account) {
     String host = account.domain;
     int port = account.port;
     bool useTLS = (port == 443 || port == 5223);
 
     final domainLower = account.domain.toLowerCase();
-
-    // chalec.org
-    if (domainLower == 'chalec.org') {
-      host = 'chalec.org';
-      if (port == 0) {
-        port = 5222;
-        useTLS = false;
-      }
-    }
-    // yaxim.org
-    else if (domainLower == 'yaxim.org') {
-      host = 'yaxim.org';
-      if (port == 0) {
-        port = 5222;
-        useTLS = false;
-      }
-    }
-    // 404.city (exceção existente)
-    else if (domainLower == '404.city') {
+    if (domainLower == '404.city') {
       host = 'j.404.city';
-      if (port == 0) {
-        port = 5222;
-        useTLS = false;
-      }
+      if (port == 0) port = 5222;
+      useTLS = false;
+    } else if (domainLower == 'chalec.org' || domainLower == 'yaxim.org') {
+      // Esses servidores aceitam registro in‑band sem CAPTCHA.
+      // Mantemos o domínio literal e porta padrão (5222) se não especificada.
+      if (port == 0) port = 5222;
+      useTLS = false;
     }
-    // Outros servidores – mantém o domínio e porta informados
+    // Outros servidores usam os valores fornecidos.
 
     return _ConnectionSettings(host, port, useTLS);
   }
 
-  // ---- Registrar (apenas conectar) ----
   @override
   UiAccount register(XmppAccount account) {
     final uiAccount = UiAccount(account);
@@ -165,7 +125,7 @@ class AccountRepoImpl implements AccountRepo {
     _accountSubject.add(_accountsList);
   }
 
-  // ---- Criação de nova conta (com registro in‑band) ----
+  // ----- MÉTODO DE CRIAÇÃO DE CONTA CORRIGIDO -----
   @override
   Future<bool> criarNovaContaNoServidor(XmppAccount account) async {
     final settings = _resolveSettings(account);
@@ -186,28 +146,13 @@ class AccountRepoImpl implements AccountRepo {
     client.addEventHandler<TransportState>('state', (state) async {
       if (state == TransportState.connected && !registrationDone) {
         try {
-          // Tenta usar o plugin registration (se disponível)
-          dynamic registrationPlugin = client.getPluginInstance('registration');
-          if (registrationPlugin != null) {
-            await registrationPlugin.register(
-              username: account.username,
-              password: account.password,
-            );
-            registrationDone = true;
-            completer.complete(true);
-            print('✅ Registro via plugin bem‑sucedido.');
-            return;
-          }
-
-          // Fallback: registro manual via IQ
-          await _registerManual(client, account);
+          // Tenta registrar via plugin ou manual
+          final success = await _registerAccount(client, account);
           registrationDone = true;
-          completer.complete(true);
-          print('✅ Registro manual bem‑sucedido.');
+          completer.complete(success);
         } catch (e) {
           registrationDone = true;
           completer.completeError(e);
-          print('❌ Erro no registro: $e');
         }
       }
     });
@@ -220,21 +165,39 @@ class AccountRepoImpl implements AccountRepo {
         Duration(seconds: 30),
         onTimeout: () {
           client.disconnect();
-          print('⏱️ Timeout no registro.');
           return false;
         },
       );
     } catch (e) {
-      print('❌ Falha no registro: $e');
+      print('Falha no registro: $e');
       client.disconnect();
       return false;
     }
   }
 
-  // ---- Registro manual (XEP‑0077) ----
-  Future<void> _registerManual(Whixp client, XmppAccount account) async {
+  // ---- Tenta registrar (plugin ou manual) ----
+  Future<bool> _registerAccount(Whixp client, XmppAccount account) async {
+    // 1. Tenta usar o plugin 'registration' se disponível
+    try {
+      // Nota: se o whixp não tiver getPluginInstance, isso lançará exceção.
+      final plugin = client.getPluginInstance('registration');
+      if (plugin != null) {
+        await plugin.register(username: account.username, password: account.password);
+        return true;
+      }
+    } catch (_) {
+      // Plugin não disponível, segue para manual
+    }
+
+    // 2. Fallback: registro manual via IQ (XEP-0077)
+    return _registerManual(client, account);
+  }
+
+  // ---- Registro manual usando IQ ----
+  Future<bool> _registerManual(Whixp client, XmppAccount account) async {
+    // Cria o IQ de registro
     final iq = Stanza(
-      name: 'iq',
+      'iq',
       attributes: {
         'type': 'set',
         'id': 'reg_${DateTime.now().millisecondsSinceEpoch}',
@@ -242,83 +205,49 @@ class AccountRepoImpl implements AccountRepo {
       },
     );
 
+    // Query com xmlns jabber:iq:register
     final query = Stanza(
-      name: 'query',
+      'query',
       attributes: {'xmlns': 'jabber:iq:register'},
     );
-    query.addChild(Stanza(name: 'username', text: account.username));
-    query.addChild(Stanza(name: 'password', text: account.password));
-
-    // Alguns servidores pedem e‑mail; para chalec.org e yaxim.org não é obrigatório,
-    // mas se precisar, descomente:
-    // query.addChild(Stanza(name: 'email', text: 'usuario@exemplo.com'));
+    query.addChild(Stanza('username', text: account.username));
+    query.addChild(Stanza('password', text: account.password));
+    // Se o servidor pedir e-mail (ex: alguns), descomente:
+    // query.addChild(Stanza('email', text: 'usuario@exemplo.com'));
 
     iq.addChild(query);
 
+    // Envia e aguarda resposta
     final response = await client.sendStanza(iq);
+
+    // Verifica se houve erro
     if (response.attributes['type'] == 'error') {
       final error = response.findChild('error');
       if (error != null) {
         final condition = error.children.firstWhere(
           (c) => c.name == 'conflict' || c.name == 'not-allowed' || c.name == 'registration-required',
-          orElse: () => Stanza(name: 'unknown'),
+          orElse: () => Stanza('unknown'),
         );
         if (condition.name == 'conflict') {
           throw Exception('Usuário já existe.');
         } else if (condition.name == 'registration-required') {
-          // Tenta extrair formulário e preencher
-          await _handleRegistrationForm(client, account, response);
-          return;
+          // Para chalec.org e yaxim.org isso não deve acontecer, mas se ocorrer,
+          // podemos tentar extrair e preencher formulário.
+          throw Exception('Servidor requer dados adicionais (formulário).');
         } else {
           throw Exception('Erro no servidor: ${error.toXML()}');
         }
+      } else {
+        throw Exception('Erro desconhecido no registro.');
       }
     }
-    // Sucesso (se não houve erro)
-  }
 
-  // ---- Tratamento de formulário (caso o servidor peça dados adicionais) ----
-  Future<void> _handleRegistrationForm(Whixp client, XmppAccount account, Stanza errorResponse) async {
-    final xElement = errorResponse.findChild('x', xmlns: 'jabber:x:data');
-    if (xElement == null) {
-      throw Exception('Servidor pediu formulário, mas não o enviou.');
-    }
-
-    final form = Stanza(
-      name: 'iq',
-      attributes: {
-        'type': 'set',
-        'id': 'reg_form_${DateTime.now().millisecondsSinceEpoch}',
-        'to': account.domain,
-      },
-    );
-
-    final query = Stanza(
-      name: 'query',
-      attributes: {'xmlns': 'jabber:iq:register'},
-    );
-
-    // Copia o <x> e preenche campos obrigatórios
-    final xCopy = Stanza.fromXML(xElement.toXML());
-    final fields = xCopy.findAllChildren('field');
-    for (var field in fields) {
-      final varName = field.attributes['var'];
-      if (varName == 'email' && !account.fullJid.contains('@')) {
-        field.addChild(Stanza(name: 'value', text: 'usuario@exemplo.com'));
-      }
-      // Se houver outro campo obrigatório, trate aqui
-    }
-    query.addChild(xCopy);
-    form.addChild(query);
-
-    final response = await client.sendStanza(form);
-    if (response.attributes['type'] == 'error') {
-      throw Exception('Falha no registro com formulário: ${response.toXML()}');
-    }
+    // Sucesso
+    return true;
   }
 }
 
-// ---- Classe auxiliar para configurações ----
+// ----- Classe auxiliar para configurações -----
 class _ConnectionSettings {
   final String host;
   final int port;
