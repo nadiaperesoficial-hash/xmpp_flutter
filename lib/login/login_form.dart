@@ -156,12 +156,12 @@ class _LoginFormState extends State<LoginForm> {
           TextButton(onPressed: () => setState(() { _isRegisterMode = true; _authMessage = null; if (!_isExtended) _isExtended = true; }), child: Text('Criar conta', style: TextStyle(color: _isRegisterMode ? Colors.lightBlueAccent : Colors.grey, fontWeight: _isRegisterMode ? FontWeight.bold : FontWeight.normal))),
         ]),
         const SizedBox(height: 24),
+        // 🔽 CAMPO DE USUÁRIO – HINT GENÉRICO, SEM DADOS PESSOAIS
         TextFormField(
           controller: _usernameController,
           keyboardType: _isExtended ? TextInputType.text : TextInputType.emailAddress,
           decoration: InputDecoration(
-            // 🔽 LINHA ALTERADA CONFORME SOLICITADO
-            hintText: _isExtended ? 'usuário' : 'layla9145@xmpp.jp',
+            hintText: _isExtended ? 'usuário' : 'usuario@servidor.com',
             prefixIcon: const Icon(Icons.person_outline),
             contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(32))
