@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:bloc/bloc.dart';
 import 'package:simple_chat/account/account.dart';
-import 'package:simple_chat/login/login_events.dart';
-import 'package:simple_chat/login/login_states.dart';
+import 'package:simple_chat/login/login_event.dart';
+import 'package:simple_chat/login/login_state.dart';
 import 'package:simple_chat/registration/xmpp_registrar.dart';
 import 'package:simple_chat/service_locator/service_locator.dart';
 import 'package:simple_chat/settings/settings.dart';
@@ -22,7 +22,6 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     on<LoginDataLoadedEvent>(_onLoginDataLoaded);
     on<LoginDataShownEvent>(_onLoginDataShown);
     on<LoginFailureEvent>(_onLoginFailure);
-
     _initData();
     _accountSub = accountBloc.stream.listen((state) {
       if (state is AccountUnregistered) {
@@ -59,20 +58,9 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   Future<void> _onRegisterPressed(RegisterButtonPressed event, Emitter<LoginState> emit) async {
     emit(const RegisterLoading());
     try {
-      await XmppRegistrar(
-        domain: event.domain,
-        host: event.domain,
-        port: event.port,
-        username: event.username,
-        password: event.password,
-      ).register();
+      await XmppRegistrar(domain: event.domain, host: event.domain, port: event.port, username: event.username, password: event.password).register();
       emit(const RegisterSuccess());
-      accountBloc.add(Login(
-        username: event.username,
-        password: event.password,
-        domain: event.domain,
-        port: event.port,
-      ));
+      accountBloc.add(Login(username: event.username, password: event.password, domain: event.domain, port: event.port));
     } catch (e) {
       emit(RegisterFailure(message: e.toString().replaceAll('Exception: ', '')));
     }
@@ -94,57 +82,30 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   void _onLoginDataLoaded(LoginDataLoadedEvent event, Emitter<LoginState> emit) {
     _rememberMe = event.rememberMe;
     _extended = event.wasExtended;
-    emit(LoginDataLoaded(
-      username: event.username,
-      password: event.password,
-      domain: event.domain,
-      port: event.port,
-      wasExtended: event.wasExtended,
-      rememberMe: event.rememberMe,
-    ));
+    emit(LoginDataLoaded(username: event.username, password: event.password, domain: event.domain, port: event.port, wasExtended: event.wasExtended, rememberMe: event.rememberMe));
   }
 
-  void _onLoginDataShown(LoginDataShownEvent event, Emitter<LoginState> emit) {
-    emit(const LoginInitial());
-  }
+  void _onLoginDataShown(LoginDataShownEvent event, Emitter<LoginState> emit) => emit(const LoginInitial());
 
-  void _onLoginFailure(LoginFailureEvent event, Emitter<LoginState> emit) {
-    emit(LoginFailure(message: event.message));
-  }
+  void _onLoginFailure(LoginFailureEvent event, Emitter<LoginState> emit) => emit(LoginFailure(message: event.message));
 
   void _initData() {
     _settings.isInitialized().then((_) {
       if (_settings.getBool(Settings.rememberMe) == true) {
-        final u = _settings.getString(Settings.username) ?? '';
-        final p = _settings.getString(Settings.password) ?? '';
-        final d = _settings.getString(Settings.domain) ?? '';
-        var port = _settings.getInt(Settings.port) ?? _settings.getDefaultPort();
-        final wasExtended = _settings.getBool(Settings.wasExtended) ?? false;
-        _extended = wasExtended;
         add(LoginDataLoadedEvent(
-          username: u,
-          password: p,
-          domain: d,
-          port: port,
-          wasExtended: wasExtended,
+          username: _settings.getString(Settings.username) ?? '',
+          password: _settings.getString(Settings.password) ?? '',
+          domain: _settings.getString(Settings.domain) ?? '',
+          port: _settings.getInt(Settings.port) ?? _settings.getDefaultPort(),
+          wasExtended: _settings.getBool(Settings.wasExtended) ?? false,
           rememberMe: true,
         ));
       } else {
-        add(LoginDataLoadedEvent(
-          username: '',
-          password: '',
-          domain: '',
-          port: _settings.getDefaultPort(),
-          wasExtended: _settings.getBool(Settings.wasExtended) ?? false,
-          rememberMe: false,
-        ));
+        add(LoginDataLoadedEvent(username: '', password: '', domain: '', port: _settings.getDefaultPort(), wasExtended: _settings.getBool(Settings.wasExtended) ?? false, rememberMe: false));
       }
     });
   }
 
   @override
-  Future<void> close() {
-    _accountSub?.cancel();
-    return super.close();
-  }
+  Future<void> close() { _accountSub?.cancel(); return super.close(); }
 }
