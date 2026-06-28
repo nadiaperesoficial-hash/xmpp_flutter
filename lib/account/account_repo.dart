@@ -56,11 +56,15 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
+    // CORRIGIDO: Agora repassamos o host (domain) e a porta vindos da configuração da conta.
+    // Também aumentamos o intervalo de reconexão de (1,3) para (3,15) segundos para dar fôlego ao Android.
     final client = Whixp(
       jabberID: '${account.username}@${account.domain}/simple_chat',
       password: account.password,
+      host: account.domain, // Adicionado explicitamente
+      port: account.port,   // Aplica dinamicamente a porta que você escolheu (5222 ou 443)
       internalDatabasePath: 'whixp_${account.username}',
-      reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
+      reconnectionPolicy: RandomBackoffReconnectionPolicy(3, 15), // Suaviza as tentativas em falhas críticas
     );
 
     uiAccount._client = client;
@@ -75,6 +79,8 @@ class AccountRepoImpl implements AccountRepo {
           account: account,
           message: 'Conexão encerrada',
         );
+        // O Whixp vai tentar reconectar sozinho em background por causa da política
+        // definida acima, mas agora sem bombardear a thread principal.
       }
     });
 
