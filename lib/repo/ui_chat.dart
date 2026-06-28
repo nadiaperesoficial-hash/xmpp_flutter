@@ -3,7 +3,6 @@ import 'package:rxdart/rxdart.dart';
 import 'package:simple_chat/account/account_repo.dart';
 import 'package:simple_chat/repo/db/db_chat.dart';
 import 'package:simple_chat/repo/ui_message.dart';
-import 'package:whixp/whixp.dart';
 
 class UiChat {
   int? dbId;
@@ -53,12 +52,8 @@ class UiChat {
   Future<bool> sendMessage(String body) async {
     final client = account.client;
     if (client == null) return false;
-    final stanza = Message(
-      to: jid,
-      body: body,
-      type: 'chat',
-    );
-    client.send(stanza);
+    // Usa sendMessage do whixp diretamente
+    client.sendMessage(to: jid, body: body);
     addMessage(body, fromMe: true);
     return true;
   }
