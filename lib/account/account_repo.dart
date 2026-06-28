@@ -56,15 +56,20 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // CORRIGIDO: Agora repassamos o host (domain) e a porta vindos da configuração da conta.
-    // Também aumentamos o intervalo de reconexão de (1,3) para (3,15) segundos para dar fôlego ao Android.
+    // CORREÇÃO 1: O servidor 404.city exige o subdomínio j.404.city para conexões XMPP.
+    // Mantemos o domínio original no JID, mas forçamos o host correto na infraestrutura.
+    String hostDeConexao = account.domain;
+    if (account.domain.toLowerCase() == '404.city') {
+      hostDeConexao = 'j.404.city'; 
+    }
+
     final client = Whixp(
       jabberID: '${account.username}@${account.domain}/simple_chat',
       password: account.password,
-      host: account.domain, // Adicionado explicitamente
-      port: account.port,   // Aplica dinamicamente a porta que você escolheu (5222 ou 443)
+      host: hostDeConexao, // Passa o host tratado corretamente
+      port: account.port,   // Força a porta definida na interface (5222 ou 443)
       internalDatabasePath: 'whixp_${account.username}',
-      reconnectionPolicy: RandomBackoffReconnectionPolicy(3, 15), // Suaviza as tentativas em falhas críticas
+      reconnectionPolicy: RandomBackoffReconnectionPolicy(3, 15),
     );
 
     uiAccount._client = client;
@@ -72,19 +77,27 @@ class AccountRepoImpl implements AccountRepo {
 
     client.addEventHandler<TransportState>('state', (state) {
       if (state == null) return;
+      
+      // CORREÇÃO 2: Print para capturar o log exato no terminal do VS Code / Android Studio
+      print("WHIXP STATUS ATUAL DA CONEXÃO: $state");
+
       if (state == TransportState.connected) {
         uiAccount.accountState = AccountRegistered(account: account);
+        print("Usuário autenticado com sucesso!");
       } else if (state == TransportState.disconnected) {
         uiAccount.accountState = AccountUnregistered(
           account: account,
           message: 'Conexão encerrada',
         );
-        // O Whixp vai tentar reconectar sozinho em background por causa da política
-        // definida acima, mas agora sem bombardear a thread principal.
       }
     });
 
-    client.connect();
+    try {
+      client.connect();
+    } catch (e) {
+      print("Erro ao tentar disparar o método connect: $e");
+    }
+    
     return uiAccount;
   }
 
