@@ -1,131 +1,104 @@
+import 'dart:async';
+import 'package:rxdart/rxdart.dart';
+import 'package:simple_chat/account/account_state.dart';
 import 'package:whixp/whixp.dart';
 
-class AccountRepo {
-  Whixp? _whixp;
+abstract class AccountRepo {
+  Stream<List<UiAccount>> get accounts;
+  UiAccount register(XmppAccount account);
+  void unregister(XmppAccount account);
+}
 
-  bool get isConnected => _whixp?.state == TransportState.connected;
+class XmppAccount {
+  final String username;
+  final String fullJid;
+  final String domain;
+  final String password;
+  final int port;
 
-  Stream<TransportState> get connectionStateStream =>
-      _whixp?.stateStream ?? Stream.empty();
+  XmppAccount(this.username, this.fullJid, this.domain, this.password, this.port);
+}
 
-  // Método de login com fallback de portas e tratamento de erro
-  Future<void> login({
-    required String username,
-    required String password,
-    required String domain,
-    int port = 5222,
-  }) async {
-    // Lista de portas a tentar (prioridade: 443, 5222)
-    final ports = [443, 5222];
-    List<String> errors = [];
+class UiAccount {
+  final XmppAccount account;
+  Whixp? _client;
+  final _stateSubject = BehaviorSubject<AccountState>();
 
-    for (final p in ports) {
-      try {
-        // Cria uma nova instância para cada tentativa
-        _whixp = Whixp(
-          jabberID: '$username@$domain/mobile',
-          password: password,
-          host: domain,
-          port: p,
-          useTLS: true,
-          reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
-          logger: Log(enableWarning: true, enableError: true),
-        );
+  Stream<AccountState> get accountStateStream => _stateSubject.stream;
+  Whixp? get client => _client;
+  String get id => '${account.username}@${account.domain}';
 
-        // Adiciona listener de estado
-        _whixp!.addEventHandler<TransportState>('state', (state) {
-          if (state == TransportState.connected) {
-            print('✅ Conectado via porta $p');
-          } else if (state == TransportState.disconnected) {
-            print('❌ Desconectado da porta $p');
-          }
-        });
+  set accountState(AccountState state) => _stateSubject.add(state);
 
-        // Tenta conectar com timeout de 15 segundos
-        await _whixp!.connect().timeout(
-          const Duration(seconds: 15),
-          onTimeout: () => throw Exception('Timeout ao conectar na porta $p'),
-        );
+  @override
+  bool operator ==(other) =>
+      other is UiAccount &&
+      account.username == other.account.username &&
+      account.domain == other.account.domain;
 
-        // Se chegou aqui, conectou com sucesso
-        await _whixp!.sendPresence(Presence(type: PresenceType.available));
-        print('✅ Login bem-sucedido na porta $p');
-        return; // Sai do loop, sucesso!
-      } catch (e) {
-        // Guarda o erro e tenta a próxima porta
-        String errorMsg = 'Porta $p: ${e.toString().replaceAll('Exception: ', '')}';
-        errors.add(errorMsg);
-        print(errorMsg);
-        // Desconecta se ainda estiver conectado
-        try { await _whixp?.disconnect(); } catch (_) {}
-        _whixp = null;
-        continue;
-      }
-    }
+  @override
+  int get hashCode => Object.hash(account.username, account.domain);
 
-    // Se nenhuma porta funcionou, lança um erro com todos os detalhes
-    throw Exception('Falha em todas as portas:\n${errors.join('\n')}');
-  }
+  UiAccount(this.account);
+}
 
-  // Método de registro (usando a porta fornecida, sem fallback)
-  Future<void> register({
-    required String username,
-    required String password,
-    required String domain,
-    int port = 5222,
-  }) async {
-    try {
-      final tempJid = '$username@$domain/register';
-      _whixp = Whixp(
-        jabberID: tempJid,
-        password: password,
-        host: domain,
-        port: port,
-        useTLS: true,
-        logger: Log(enableWarning: true, enableError: true),
-      );
+class AccountRepoImpl implements AccountRepo {
+  final _accountSubject = BehaviorSubject<List<UiAccount>>();
+  final List<UiAccount> _accountsList = [];
 
-      await _whixp!.connect().timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw Exception('Timeout ao registrar na porta $port'),
-      );
+  @override
+  Stream<List<UiAccount>> get accounts => _accountSubject.stream;
 
-      final iq = Iq(
-        type: IqType.set,
-        to: JID.fromString(domain),
-        children: [
-          XmlElement(
-            name: 'query',
-            attributes: {'xmlns': 'jabber:iq:register'},
-            children: [
-              XmlElement(name: 'username', text: username),
-              XmlElement(name: 'password', text: password),
-            ],
-          ),
-        ],
-      );
+  @override
+  UiAccount register(XmppAccount account) {
+    final uiAccount = UiAccount(account);
+    _accountsList.removeWhere((a) => a == uiAccount);
+    _accountsList.add(uiAccount);
+    _accountSubject.add(_accountsList);
 
-      await _whixp!.sendIq(iq);
-      await _whixp!.disconnect();
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  Future<void> logout() async {
-    if (_whixp != null && isConnected) {
-      await _whixp!.sendPresence(Presence(type: PresenceType.unavailable));
-      await _whixp!.disconnect();
-    }
-  }
-
-  Future<void> sendMessage(String to, String body) async {
-    if (!isConnected) throw Exception('Não conectado');
-    final message = Message(
-      to: JID.fromString(to),
-      body: body,
-      type: MessageType.chat,
+    final client = Whixp(
+      jabberID: '${account.username}@${account.domain}',
+      password: account.password,
+      host: account.domain,
+      port: account.port,
     );
-    await _whixp!.sendMessage(message);
+
+    uiAccount._client = client;
+    uiAccount.accountState = AccountRegistering(account: account);
+
+    client.addEventHandler<dynamic>('streamNegotiated', (_) {
+      uiAccount.accountState = AccountRegistered(account: account);
+    });
+
+    client.addEventHandler<dynamic>('disconnected', (_) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: 'Conexão encerrada',
+      );
+    });
+
+    client.addEventHandler<dynamic>('connectionFailed', (_) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: 'Falha na conexão',
+      );
+    });
+
+    // 🔽 ADICIONE ESTA LINHA PARA VER O ERRO (somente isso)
+    client.connect().catchError((e) {
+      print('ERRO NA CONEXÃO: $e');
+    });
+    return uiAccount;
+  }
+
+  @override
+  void unregister(XmppAccount account) {
+    final id = '${account.username}@${account.domain}';
+    final idx = _accountsList.indexWhere((a) => a.id == id);
+    if (idx != -1) {
+      _accountsList[idx]._client?.disconnect();
+      _accountsList.removeAt(idx);
+    }
+    _accountSubject.add(_accountsList);
   }
 }
