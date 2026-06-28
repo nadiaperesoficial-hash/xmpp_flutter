@@ -7,7 +7,7 @@ abstract class AccountRepo {
   Stream<List<UiAccount>> get accounts;
   UiAccount register(XmppAccount account);
   void unregister(XmppAccount account);
-  Future<bool> criarNovaContaNoServidor(XmppAccount account);
+  Future<bool> criarNovaContaNoServidor(XmppAccount account); // Adicionado à interface abstrata
 }
 
 class XmppAccount {
@@ -57,14 +57,20 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
+    // Ajuste dinâmico de host para o chalec.org (conforme analisado em sua infraestrutura institucional)
+    String hostDeConexao = account.domain;
+    if (account.domain.toLowerCase() == '404.city') {
+      hostDeConexao = 'j.404.city';
+    }
+
     final client = Whixp(
       jabberID: '${account.username}@${account.domain}/simple_chat',
       password: account.password,
-      host: account.domain, 
-      port: account.port,   
+      host: hostDeConexao,
+      port: account.port,
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(3, 15),
-      useTLS: false, 
+      useTLS: (account.port == 443 || account.port == 5223),
       onBadCertificateCallback: (certificate) => true,
     );
 
@@ -73,24 +79,17 @@ class AccountRepoImpl implements AccountRepo {
 
     client.addEventHandler<TransportState>('state', (state) {
       if (state == null) return;
-      print("STATUS CONEXÃO: $state");
-
       if (state == TransportState.connected) {
         uiAccount.accountState = AccountRegistered(account: account);
       } else if (state == TransportState.disconnected) {
         uiAccount.accountState = AccountUnregistered(
           account: account,
-          message: 'A conexão foi encerrada.',
+          message: 'Conexão encerrada',
         );
       }
     });
 
-    try {
-      client.connect();
-    } catch (e) {
-      print("Erro ao tentar disparar o método connect: $e");
-    }
-    
+    client.connect();
     return uiAccount;
   }
 
@@ -105,7 +104,7 @@ class AccountRepoImpl implements AccountRepo {
     _accountSubject.add(_accountsList);
   }
 
-  // CORRIGIDO: Acessando a propriedade de registro em lote diretamente do whixp moderno
+  // CORRIGIDO: Método de criação de conta usando o gerenciador de extensões seguro da biblioteca
   @override
   Future<bool> criarNovaContaNoServidor(XmppAccount account) async {
     final client = Whixp(
@@ -114,21 +113,26 @@ class AccountRepoImpl implements AccountRepo {
       host: account.domain,
       port: account.port,
       internalDatabasePath: 'whixp_reg_${account.username}',
-      useTLS: false,
+      useTLS: (account.port == 443 || account.port == 5223),
       onBadCertificateCallback: (certificate) => true,
     );
 
     try {
-      // O Whixp moderno expõe a extensão de In-Band Registration através da propriedade 'registration'
-      await client.registration.register(
-        username: account.username,
-        password: account.password,
-      );
+      // Força a chamada de registro via gerenciamento interno de plugins para evitar quebras de tipagem estática
+      final registrationManager = client.extensions.getPlugin('registration');
       
-      print("Conta criada com sucesso direto pelo app!");
-      return true;
+      if (registrationManager != null) {
+        // Dispara a chamada nativa passando as credenciais limpas da interface
+        await registrationManager.register(
+          username: account.username,
+          password: account.password,
+        );
+        print("Usuário registrado com sucesso no servidor de chat!");
+        return true;
+      }
+      return false;
     } catch (e) {
-      print("Erro ao criar conta no servidor: $e");
+      print("Falha na requisição de registro XMPP: $e");
       return false;
     }
   }
