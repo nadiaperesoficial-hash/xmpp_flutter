@@ -84,10 +84,11 @@ class AccountRepoImpl implements AccountRepo {
       );
     });
 
-    // 🔽 ADICIONE ESTA LINHA PARA VER O ERRO (somente isso)
+    // 🔽 CORREÇÃO: não atribuir o resultado de connect() a nada – apenas logar erro
     client.connect().catchError((e) {
       print('ERRO NA CONEXÃO: $e');
     });
+
     return uiAccount;
   }
 
