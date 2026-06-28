@@ -121,7 +121,6 @@ class _LoginFormState extends State<LoginForm> {
         } else if (state is LoginExtendedChanged) {
           _isExtended = state.loginExtendValue;
         } else if (state is LoginFailure) {
-          // 🔽 Exibe a mensagem de erro na tela
           _authMessage = state.message;
         } else if (state is RegisterFailure) {
           _authMessage = state.message;
@@ -134,7 +133,7 @@ class _LoginFormState extends State<LoginForm> {
           _authMessage = null;
           Navigator.pushReplacementNamed(context, MainPage.TAG);
         } else if (state is LoginLoading) {
-          _authMessage = null; // limpa mensagem ao tentar novamente
+          _authMessage = null;
         }
       },
       builder: (context, state) {
