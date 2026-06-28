@@ -115,26 +115,26 @@ class _LoginFormState extends State<LoginForm> {
           _rememberMe = state.rememberMe;
           _isExtended = state.wasExtended;
           _authMessage = null;
-          // 🔽 REMOVIDO const – construtor não é constante
           _loginBloc.add(LoginDataShownEvent());
         } else if (state is RememberMeChanged) {
           _rememberMe = state.rememberMeValue;
         } else if (state is LoginExtendedChanged) {
           _isExtended = state.loginExtendValue;
         } else if (state is LoginFailure) {
+          // 🔽 Exibe a mensagem de erro na tela
           _authMessage = state.message;
         } else if (state is RegisterFailure) {
           _authMessage = state.message;
         } else if (state is RegisterSuccess) {
           _authMessage = null;
-          // 🔽 REMOVIDO const – construtor não é constante
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Conta criada! Entrando...'), backgroundColor: Colors.green)
+            const SnackBar(content: Text('Conta criada! Entrando...'), backgroundColor: Colors.green)
           );
         } else if (state is LoginSuccess) {
+          _authMessage = null;
           Navigator.pushReplacementNamed(context, MainPage.TAG);
         } else if (state is LoginLoading) {
-          _authMessage = null;
+          _authMessage = null; // limpa mensagem ao tentar novamente
         }
       },
       builder: (context, state) {
@@ -195,8 +195,16 @@ class _LoginFormState extends State<LoginForm> {
           ]),
           TextButton(onPressed: () => _loginBloc.add(ExtendPressed()), child: Text(_isExtended ? 'Básico' : 'Avançado', style: const TextStyle(color: Colors.blueAccent))),
         ]),
+        // 🔽 Exibe a mensagem de erro se existir
         if (_authMessage != null && _authMessage!.isNotEmpty)
-          Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_authMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              _authMessage!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+            ),
+          ),
         ElevatedButton(
           onPressed: _isRegisterMode ? _onRegisterPressed : _onLoginPressed,
           style: ElevatedButton.styleFrom(backgroundColor: Colors.lightBlueAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), padding: const EdgeInsets.all(14)),
