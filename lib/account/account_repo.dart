@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:rxdart/rxdart.dart';
 import 'package:simple_chat/account/account_state.dart';
-import 'package:xmpp_plugin/xmpp_plugin.dart';
+import 'package:whixp/whixp.dart';
 
 abstract class AccountRepo {
   Stream<List<UiAccount>> get accounts;
@@ -21,10 +21,11 @@ class XmppAccount {
 
 class UiAccount {
   final XmppAccount account;
-  
+  Whixp? _client;
   final _stateSubject = BehaviorSubject<AccountState>();
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
+  Whixp? get client => _client;
   String get id => '${account.username}@${account.domain}';
 
   set accountState(AccountState state) => _stateSubject.add(state);
@@ -44,7 +45,6 @@ class UiAccount {
 class AccountRepoImpl implements AccountRepo {
   final _accountSubject = BehaviorSubject<List<UiAccount>>();
   final List<UiAccount> _accountsList = [];
-  final Map<String, XmppConnection> _connections = {};
 
   @override
   Stream<List<UiAccount>> get accounts => _accountSubject.stream;
@@ -56,44 +56,40 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    final params = {
-      'user_jid': '${account.username}@${account.domain}',
-      'password': account.password,
-      'host': account.domain,
-      'port': account.port.toString(),
-      'requireSSLConnection': true,
-      'autoDeliveryReceipt': true,
-      'useStreamManagement': false,
-      'automaticReconnection': true,
-    };
+    final client = Whixp(
+      jabberID: '${account.username}@${account.domain}',
+      password: account.password,
+      host: account.domain,
+      port: account.port,
+    );
 
-    final connection = XmppConnection(params);
-    _connections[uiAccount.id] = connection;
+    uiAccount._client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    connection.start((error) {
-      uiAccount.accountState = AccountUnregistered(
-        account: account,
-        message: error.toString(),
-      );
-    }).then((_) async {
-      await connection.login();
-      uiAccount.accountState = AccountRegistered(account: account);
-    }).catchError((e) {
-      uiAccount.accountState = AccountUnregistered(
-        account: account,
-        message: e.toString(),
-      );
+    client.addEventHandler<ConnectionState>('connectionState', (state) {
+      if (state == ConnectionState.connected) {
+        uiAccount.accountState = AccountRegistered(account: account);
+      } else if (state == ConnectionState.disconnected ||
+          state == ConnectionState.error) {
+        uiAccount.accountState = AccountUnregistered(
+          account: account,
+          message: 'Falha na conexão',
+        );
+      }
     });
 
+    client.connect();
     return uiAccount;
   }
 
   @override
   void unregister(XmppAccount account) {
     final id = '${account.username}@${account.domain}';
-    _connections[id]?.logout();
-    _connections.remove(id);
+    final uiAccount = _accountsList.firstWhere(
+      (a) => a.id == id,
+      orElse: () => UiAccount(account),
+    );
+    uiAccount._client?.disconnect();
     _accountsList.removeWhere((a) => a.id == id);
     _accountSubject.add(_accountsList);
   }
