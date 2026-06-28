@@ -33,7 +33,9 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       if (accountState is AccountRegistered) {
         add(LoginSuccessEvent());
       } else if (accountState is AccountUnregistered) {
-        add(LoginFailureEvent(message: accountState.message ?? 'Falha na conexão'));
+        // Pega a mensagem de erro do AccountBloc
+        String msg = accountState.message ?? 'Falha na conexão';
+        add(LoginFailureEvent(message: msg));
       }
     });
 
@@ -83,6 +85,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     }
 
     emit(LoginLoading());
+    // Dispara o login no AccountBloc
     accountBloc.add(Login(
       username: username,
       password: password,
