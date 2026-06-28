@@ -116,7 +116,8 @@ class AccountRepoImpl implements AccountRepo {
     );
 
     try {
-      dynamic registrationPlugin = client.getPluginInstance('registration');
+      // CORRIGIDO: Acessa o mapa público 'plugins' direto pelo nome da extensão
+      final dynamic registrationPlugin = client.plugins['registration'];
       
       if (registrationPlugin != null) {
         await registrationPlugin.register(
