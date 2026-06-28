@@ -67,7 +67,12 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         password: event.password,
       ).register();
       emit(const RegisterSuccess());
-      accountBloc.add(Login(username: event.username, password: event.password, domain: event.domain, port: event.port));
+      accountBloc.add(Login(
+        username: event.username,
+        password: event.password,
+        domain: event.domain,
+        port: event.port,
+      ));
     } catch (e) {
       emit(RegisterFailure(message: e.toString().replaceAll('Exception: ', '')));
     }
@@ -89,7 +94,14 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   void _onLoginDataLoaded(LoginDataLoadedEvent event, Emitter<LoginState> emit) {
     _rememberMe = event.rememberMe;
     _extended = event.wasExtended;
-    emit(LoginDataLoaded(username: event.username, password: event.password, domain: event.domain, port: event.port, wasExtended: event.wasExtended, rememberMe: event.rememberMe));
+    emit(LoginDataLoaded(
+      username: event.username,
+      password: event.password,
+      domain: event.domain,
+      port: event.port,
+      wasExtended: event.wasExtended,
+      rememberMe: event.rememberMe,
+    ));
   }
 
   void _onLoginDataShown(LoginDataShownEvent event, Emitter<LoginState> emit) {
@@ -109,9 +121,23 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         var port = _settings.getInt(Settings.port) ?? _settings.getDefaultPort();
         final wasExtended = _settings.getBool(Settings.wasExtended) ?? false;
         _extended = wasExtended;
-        add(LoginDataLoadedEvent(username: u, password: p, domain: d, port: port, wasExtended: wasExtended, rememberMe: true));
+        add(LoginDataLoadedEvent(
+          username: u,
+          password: p,
+          domain: d,
+          port: port,
+          wasExtended: wasExtended,
+          rememberMe: true,
+        ));
       } else {
-        add(LoginDataLoadedEvent(username: '', password: '', domain: '', port: _settings.getDefaultPort(), wasExtended: _settings.getBool(Settings.wasExtended) ?? false, rememberMe: false));
+        add(LoginDataLoadedEvent(
+          username: '',
+          password: '',
+          domain: '',
+          port: _settings.getDefaultPort(),
+          wasExtended: _settings.getBool(Settings.wasExtended) ?? false,
+          rememberMe: false,
+        ));
       }
     });
   }
