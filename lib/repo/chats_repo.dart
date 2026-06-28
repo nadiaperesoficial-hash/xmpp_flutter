@@ -6,6 +6,7 @@ import 'package:simple_chat/repo/db/db.dart';
 import 'package:simple_chat/repo/db/db_chat.dart';
 import 'package:simple_chat/repo/ui_chat.dart';
 import 'package:simple_chat/service_locator/service_locator.dart';
+import 'package:whixp/whixp.dart';
 
 abstract class ChatsRepo {
   Stream<List<UiChat>> get chatsStream;
@@ -47,10 +48,10 @@ class ChatsRepoImpl implements ChatsRepo {
   }
 
   void _listenMessages(UiAccount acc) {
-    acc.client?.addEventHandler<Map<String, dynamic>?>('message', (data) {
-      if (data == null) return;
-      final fromJid = (data['from'] as String?) ?? '';
-      final body = (data['body'] as String?) ?? '';
+    acc.client?.addEventHandler<Message>('message', (message) {
+      if (message == null) return;
+      final fromJid = message.from?.toString() ?? '';
+      final body = message.body ?? '';
       if (fromJid.isEmpty || body.isEmpty) return;
 
       var chat = _chats.firstWhere(
