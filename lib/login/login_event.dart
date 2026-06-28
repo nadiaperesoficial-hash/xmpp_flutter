@@ -1,5 +1,3 @@
-part of 'login_bloc.dart';
-
 abstract class LoginEvent {}
 
 class LoginButtonPressed extends LoginEvent {
@@ -8,7 +6,7 @@ class LoginButtonPressed extends LoginEvent {
   final String domain;
   final int port;
 
-  const LoginButtonPressed({
+  LoginButtonPressed({
     required this.username,
     required this.password,
     required this.domain,
@@ -22,7 +20,7 @@ class RegisterButtonPressed extends LoginEvent {
   final String domain;
   final int port;
 
-  const RegisterButtonPressed({
+  RegisterButtonPressed({
     required this.username,
     required this.password,
     required this.domain,
@@ -34,7 +32,7 @@ class ExtendPressed extends LoginEvent {}
 
 class RememberMePressed extends LoginEvent {
   final bool rememberMeValue;
-  const RememberMePressed({required this.rememberMeValue});
+  RememberMePressed({required this.rememberMeValue});
 }
 
 class LoginDataLoadedEvent extends LoginEvent {
@@ -45,7 +43,7 @@ class LoginDataLoadedEvent extends LoginEvent {
   final bool wasExtended;
   final bool rememberMe;
 
-  const LoginDataLoadedEvent({
+  LoginDataLoadedEvent({
     required this.username,
     required this.password,
     required this.domain,
@@ -59,8 +57,7 @@ class LoginDataShownEvent extends LoginEvent {}
 
 class LoginFailureEvent extends LoginEvent {
   final String message;
-  const LoginFailureEvent({required this.message});
+  LoginFailureEvent({required this.message});
 }
 
-// Novo evento para sucesso de login
 class LoginSuccessEvent extends LoginEvent {}
