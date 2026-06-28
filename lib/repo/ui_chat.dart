@@ -52,8 +52,11 @@ class UiChat {
   Future<bool> sendMessage(String body) async {
     final client = account.client;
     if (client == null) return false;
-    // Usa sendMessage do whixp diretamente
-    client.sendMessage(to: jid, body: body);
+    
+    // CORRIGIDO: O JID agora é passado como o primeiro argumento posicional.
+    // O parâmetro 'body' continua nomeado como exigido pelo whixp.
+    client.sendMessage(jid, body: body);
+    
     addMessage(body, fromMe: true);
     return true;
   }
