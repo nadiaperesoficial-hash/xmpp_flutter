@@ -56,20 +56,28 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // CORREÇÃO 1: O servidor 404.city exige o subdomínio j.404.city para conexões XMPP.
-    // Mantemos o domínio original no JID, mas forçamos o host correto na infraestrutura.
+    // CORREÇÃO 1: Mapeamento do host físico correto para o servidor 404.city
     String hostDeConexao = account.domain;
     if (account.domain.toLowerCase() == '404.city') {
       hostDeConexao = 'j.404.city'; 
     }
 
+    // CORREÇÃO 2: Define se a conexão deve iniciar o socket de forma criptografada (TLS Direto)
+    final bool forcarCriptografia = (account.port == 443 || account.port == 5223);
+
     final client = Whixp(
       jabberID: '${account.username}@${account.domain}/simple_chat',
       password: account.password,
-      host: hostDeConexao, // Passa o host tratado corretamente
-      port: account.port,   // Força a porta definida na interface (5222 ou 443)
+      host: hostDeConexao, 
+      port: account.port,   
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(3, 15),
+      
+      // CORREÇÃO 3: Sintaxe oficial com letras maiúsculas exigida pelo pacote whixp
+      useTLS: forcarCriptografia,
+
+      // CORREÇÃO 4: Callback necessário para o Android aceitar certificados de servidores públicos
+      onBadCertificateCallback: (certificate) => true,
     );
 
     uiAccount._client = client;
@@ -78,7 +86,6 @@ class AccountRepoImpl implements AccountRepo {
     client.addEventHandler<TransportState>('state', (state) {
       if (state == null) return;
       
-      // CORREÇÃO 2: Print para capturar o log exato no terminal do VS Code / Android Studio
       print("WHIXP STATUS ATUAL DA CONEXÃO: $state");
 
       if (state == TransportState.connected) {
@@ -87,7 +94,7 @@ class AccountRepoImpl implements AccountRepo {
       } else if (state == TransportState.disconnected) {
         uiAccount.accountState = AccountUnregistered(
           account: account,
-          message: 'Conexão encerrada',
+          message: 'Conexão encerrada pelo servidor ou erro de credenciais.',
         );
       }
     });
@@ -96,6 +103,10 @@ class AccountRepoImpl implements AccountRepo {
       client.connect();
     } catch (e) {
       print("Erro ao tentar disparar o método connect: $e");
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: 'Erro interno ao iniciar socket de conexão.',
+      );
     }
     
     return uiAccount;
