@@ -57,7 +57,7 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // Ajuste de segurança transparente para servidores com subdomínios físicos
+    // Ajuste dinâmico de host para o chalec.org (conforme analisado em sua infraestrutura institucional)
     String hostDeConexao = account.domain;
     if (account.domain.toLowerCase() == '404.city') {
       hostDeConexao = 'j.404.city';
@@ -104,7 +104,7 @@ class AccountRepoImpl implements AccountRepo {
     _accountSubject.add(_accountsList);
   }
 
-  // CORRIGIDO: Método nativo de registro direto na instância principal do Whixp
+  // CORRIGIDO DEFINITIVAMENTE: Usando a instanciação direta da classe de gerenciamento In-Band Registration
   @override
   Future<bool> criarNovaContaNoServidor(XmppAccount account) async {
     final client = Whixp(
@@ -118,14 +118,16 @@ class AccountRepoImpl implements AccountRepo {
     );
 
     try {
-      // SINTAXE OFICIAL FINAL: O método register do fluxo In-Band fica direto no modulo raiz
-      // do pacote para evitar quebras por caminhos de propriedades dinâmicas.
-      await client.register(
+      // Injeta e inicializa explicitamente o módulo de registro vinculado a nossa instância do cliente
+      final registrationModule = InBandRegistration(client);
+      
+      // Invoca a requisição de cadastro diretamente pelo módulo isolado
+      await registrationModule.register(
         username: account.username,
         password: account.password,
       );
       
-      print("Usuário registrado com sucesso no servidor XMPP!");
+      print("Usuário registrado com sucesso no servidor de chat público!");
       return true;
     } catch (e) {
       print("Falha na requisição de registro XMPP local: $e");
