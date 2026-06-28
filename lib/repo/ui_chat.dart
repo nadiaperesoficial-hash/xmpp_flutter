@@ -3,6 +3,7 @@ import 'package:rxdart/rxdart.dart';
 import 'package:simple_chat/account/account_repo.dart';
 import 'package:simple_chat/repo/db/db_chat.dart';
 import 'package:simple_chat/repo/ui_message.dart';
+import 'package:whixp/whixp.dart';
 
 class UiChat {
   int? dbId;
@@ -16,7 +17,6 @@ class UiChat {
   final _messagesSubject = BehaviorSubject<List<UiMessage>>();
 
   bool get isEmpty => jid.isEmpty;
-
   Stream<List<UiMessage>> get uiMessages => _messagesSubject.stream;
 
   @override
@@ -51,6 +51,14 @@ class UiChat {
   }
 
   Future<bool> sendMessage(String body) async {
+    final client = account.client;
+    if (client == null) return false;
+    final stanza = Message(
+      to: jid,
+      body: body,
+      type: 'chat',
+    );
+    client.send(stanza);
     addMessage(body, fromMe: true);
     return true;
   }
