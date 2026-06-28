@@ -36,10 +36,6 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       } else if (accountState is AccountUnregistered) {
         // 🔽 Garante que a mensagem de erro seja exibida
         String msg = accountState.message ?? 'Falha na conexão';
-        // Se a mensagem for muito genérica, adiciona detalhe
-        if (msg == 'Falha na conexão' || msg == 'Conexão encerrada') {
-          msg = '$msg – verifique sua rede e tente novamente';
-        }
         add(LoginFailureEvent(message: msg));
       }
     });
