@@ -31,8 +31,18 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.6'
+          flutter-version: '3.19.6'   # pode manter ou subir para 3.22.x
           channel: stable
+
+      # -------------------------------------------------------------
+      #  PASSO CRÍTICO: corrige a versão do whixp para evitar conflito com path
+      # -------------------------------------------------------------
+      - name: Fix whixp version dependency
+        working-directory: app
+        run: |
+          # Remove qualquer referência antiga ao whixp no pubspec.yaml
+          # e adiciona a versão compatível (2.1.3)
+          flutter pub add whixp:^2.1.3
 
       - name: Get dependencies
         working-directory: app
