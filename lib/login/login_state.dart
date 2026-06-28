@@ -1,5 +1,3 @@
-part of 'login_bloc.dart';
-
 abstract class LoginState {}
 
 class LoginInitial extends LoginState {}
@@ -30,7 +28,7 @@ class LoginDataLoaded extends LoginState {
   final bool wasExtended;
   final bool rememberMe;
 
-  const LoginDataLoaded({
+  LoginDataLoaded({
     required this.username,
     required this.password,
     required this.domain,
