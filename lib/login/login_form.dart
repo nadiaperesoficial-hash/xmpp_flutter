@@ -3,7 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:simple_chat/login/login_bloc.dart';
 import 'package:simple_chat/login/login_event.dart';
 import 'package:simple_chat/login/login_state.dart';
-import 'package:simple_chat/main_page/main_page_widget.dart'; // ← import para MainPage.TAG
+import 'package:simple_chat/main_page/main_page_widget.dart';
 
 const List<Map<String, dynamic>> kPublicServers = [
   {'name': 'xmpp.jp', 'domain': 'xmpp.jp', 'port': 5222},
@@ -115,7 +115,8 @@ class _LoginFormState extends State<LoginForm> {
           _rememberMe = state.rememberMe;
           _isExtended = state.wasExtended;
           _authMessage = null;
-          _loginBloc.add(const LoginDataShownEvent());
+          // 🔽 REMOVIDO const – construtor não é constante
+          _loginBloc.add(LoginDataShownEvent());
         } else if (state is RememberMeChanged) {
           _rememberMe = state.rememberMeValue;
         } else if (state is LoginExtendedChanged) {
@@ -126,9 +127,11 @@ class _LoginFormState extends State<LoginForm> {
           _authMessage = state.message;
         } else if (state is RegisterSuccess) {
           _authMessage = null;
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conta criada! Entrando...'), backgroundColor: Colors.green));
+          // 🔽 REMOVIDO const – construtor não é constante
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Conta criada! Entrando...'), backgroundColor: Colors.green)
+          );
         } else if (state is LoginSuccess) {
-          // 🔽 NAVEGAÇÃO CORRETA usando MainPage.TAG
           Navigator.pushReplacementNamed(context, MainPage.TAG);
         } else if (state is LoginLoading) {
           _authMessage = null;
@@ -190,7 +193,7 @@ class _LoginFormState extends State<LoginForm> {
             Checkbox(value: _rememberMe, onChanged: (v) => _loginBloc.add(RememberMePressed(rememberMeValue: v ?? false))),
             const Text('Lembrar'),
           ]),
-          TextButton(onPressed: () => _loginBloc.add(const ExtendPressed()), child: Text(_isExtended ? 'Básico' : 'Avançado', style: const TextStyle(color: Colors.blueAccent))),
+          TextButton(onPressed: () => _loginBloc.add(ExtendPressed()), child: Text(_isExtended ? 'Básico' : 'Avançado', style: const TextStyle(color: Colors.blueAccent))),
         ]),
         if (_authMessage != null && _authMessage!.isNotEmpty)
           Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_authMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
