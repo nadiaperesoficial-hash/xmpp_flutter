@@ -7,7 +7,7 @@ abstract class AccountRepo {
   Stream<List<UiAccount>> get accounts;
   UiAccount register(XmppAccount account);
   void unregister(XmppAccount account);
-  Future<bool> criarNovaContaNoServidor(XmppAccount account); // Contrato do método de registro
+  Future<bool> criarNovaContaNoServidor(XmppAccount account);
 }
 
 class XmppAccount {
@@ -50,7 +50,6 @@ class AccountRepoImpl implements AccountRepo {
   @override
   Stream<List<UiAccount>> get accounts => _accountSubject.stream;
 
-  // 1. MÉTODO PARA REALIZAR LOGIN (CONECTAR CONTA EXISTENTE)
   @override
   UiAccount register(XmppAccount account) {
     final uiAccount = UiAccount(account);
@@ -65,7 +64,7 @@ class AccountRepoImpl implements AccountRepo {
       port: account.port,   
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(3, 15),
-      useTLS: false, // Define como false para permitir a negociação STARTTLS padrão do chalec.org na porta 5222
+      useTLS: false, 
       onBadCertificateCallback: (certificate) => true,
     );
 
@@ -95,7 +94,18 @@ class AccountRepoImpl implements AccountRepo {
     return uiAccount;
   }
 
-  // 2. NOVO MÉTODO PARA CRIAR CONTA DO ZERO DIRETAMENTE PELO APLICATIVO
+  @override
+  void unregister(XmppAccount account) {
+    final id = '${account.username}@${account.domain}';
+    final idx = _accountsList.indexWhere((a) => a.id == id);
+    if (idx != -1) {
+      _accountsList[idx]._client?.disconnect();
+      _accountsList.removeAt(idx);
+    }
+    _accountSubject.add(_accountsList);
+  }
+
+  // CORRIGIDO: Acessando a propriedade de registro em lote diretamente do whixp moderno
   @override
   Future<bool> criarNovaContaNoServidor(XmppAccount account) async {
     final client = Whixp(
@@ -109,33 +119,17 @@ class AccountRepoImpl implements AccountRepo {
     );
 
     try {
-      // Solicita o plugin nativo de registro em lote do protocolo XMPP
-      final registration = client.getPlugin<InBandRegistration>('registration');
+      // O Whixp moderno expõe a extensão de In-Band Registration através da propriedade 'registration'
+      await client.registration.register(
+        username: account.username,
+        password: account.password,
+      );
       
-      if (registration != null) {
-        // Envia os dados para a criação de conta limpa
-        await registration.register(
-          username: account.username,
-          password: account.password,
-        );
-        print("Conta criada com sucesso direto pelo app!");
-        return true;
-      }
-      return false;
+      print("Conta criada com sucesso direto pelo app!");
+      return true;
     } catch (e) {
       print("Erro ao criar conta no servidor: $e");
       return false;
     }
-  }
-
-  @override
-  void unregister(XmppAccount account) {
-    final id = '${account.username}@${account.domain}';
-    final idx = _accountsList.indexWhere((a) => a.id == id);
-    if (idx != -1) {
-      _accountsList[idx]._client?.disconnect();
-      _accountsList.removeAt(idx);
-    }
-    _accountSubject.add(_accountsList);
   }
 }
