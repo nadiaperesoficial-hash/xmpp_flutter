@@ -5,9 +5,8 @@ import 'package:whixp/whixp.dart';
 
 abstract class AccountRepo {
   Stream<List<UiAccount>> get accounts;
-  UiAccount register(XmppAccount account);
+  Future<UiAccount?> register(XmppAccount account); // Mudado para Future para aguardar o login real
   void unregister(XmppAccount account);
-  Future<bool> criarNovaContaNoServidor(XmppAccount account);
 }
 
 class XmppAccount {
@@ -51,33 +50,23 @@ class AccountRepoImpl implements AccountRepo {
   Stream<List<UiAccount>> get accounts => _accountSubject.stream;
 
   @override
-  UiAccount register(XmppAccount account) {
+  Future<UiAccount?> register(XmppAccount account) async {
     final uiAccount = UiAccount(account);
     _accountsList.removeWhere((a) => a == uiAccount);
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // BLAQUEIO DE LOOP: Se o linter ou a rede forçar 404.city, fazemos o desvio físico
-    String hostDeConexao = account.domain;
-    if (account.domain.toLowerCase() == '404.city') {
-      hostDeConexao = 'j.404.city';
-    }
+    // O Completer impede o código de avançar e quebrar a interface antes do login concluir
+    final loginCompleter = Completer<bool>();
 
-    // AQUI ESTÁ A CONFIGURAÇÃO DE LOGIN QUE CRIA O CANAL SEGURO DIRECTO:
     final client = Whixp(
       jabberID: '${account.username}@${account.domain}/simple_chat',
       password: account.password,
-      host: hostDeConexao,
-      port: account.port, // IMPORTANTE: Digite 5223 na tela do celular
+      host: account.domain,
+      port: account.port,
       internalDatabasePath: 'whixp_${account.username}',
-      
-      // Desativa reconexões automáticas na thread para a tela parar de piscar se errar a senha
-      reconnectionPolicy: null, 
-      
-      // FORÇA CRIPTOGRAFIA COMPLETA DESDE O PRIMEIRO MILISSEGUNDO (Resolve o problema da porta 5223)
-      useTLS: true, 
-      
-      // Ignora travas de segurança de certificados autoassinados no Android
+      reconnectionPolicy: null, // Evita metralhadora de reconexões que reinicia a tela
+      useTLS: (account.port == 443 || account.port == 5223),
       onBadCertificateCallback: (certificate) => true,
     );
 
@@ -86,17 +75,38 @@ class AccountRepoImpl implements AccountRepo {
 
     client.addEventHandler<TransportState>('state', (state) {
       if (state == null) return;
+
       if (state == TransportState.connected) {
         uiAccount.accountState = AccountRegistered(account: account);
+        if (!loginCompleter.isCompleted) loginCompleter.complete(true);
       } else if (state == TransportState.disconnected) {
         uiAccount.accountState = AccountUnregistered(
           account: account,
-          message: 'Falha na conexão física com o servidor.',
+          message: 'Falha na autenticação do servidor.',
         );
+        if (!loginCompleter.isCompleted) loginCompleter.complete(false);
       }
     });
 
-    client.connect();
+    try {
+      client.connect();
+      
+      // Bloqueia a execução por até 10 segundos aguardando a resposta real do socket XMPP
+      final sucessoNoLogin = await loginCompleter.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => false,
+      );
+
+      if (!sucessoNoLogin) {
+        // Se o login falhou, limpamos a instância e retornamos nulo para a UI saber o que houve
+        _accountsList.remove(uiAccount);
+        _accountSubject.add(_accountsList);
+        return null; 
+      }
+    } catch (e) {
+      return null;
+    }
+
     return uiAccount;
   }
 
@@ -109,11 +119,5 @@ class AccountRepoImpl implements AccountRepo {
       _accountsList.removeAt(idx);
     }
     _accountSubject.add(_accountsList);
-  }
-
-  @override
-  Future<bool> criarNovaContaNoServidor(XmppAccount account) async {
-    print("Módulo de registro limpo para evitar erros no linter.");
-    return false;
   }
 }
