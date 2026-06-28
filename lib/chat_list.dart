@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:simple_chat/const.dart';
 import 'package:simple_chat/roster/roster_repo.dart';
@@ -14,12 +15,6 @@ class ChatList extends StatefulWidget {
 
 class ChatListState extends State<ChatList> {
   final _rosterRepo = sl.get<RosterRepo>();
-  bool isLoading = false;
-
-  Future<bool> _onBackPress() async {
-    await _openDialog();
-    return false;
-  }
 
   Future<void> _openDialog() async {
     final result = await showDialog<int>(
@@ -36,35 +31,18 @@ class ChatListState extends State<ChatList> {
               children: [
                 Icon(Icons.exit_to_app, size: 30, color: Colors.white),
                 SizedBox(height: 8),
-                Text('Exit app',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-                Text('Are you sure?',
-                    style: TextStyle(color: Colors.white70, fontSize: 14)),
+                Text('Exit app', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text('Are you sure?', style: TextStyle(color: Colors.white70, fontSize: 14)),
               ],
             ),
           ),
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, 0),
-            child: Row(children: [
-              Icon(Icons.cancel, color: primaryColor),
-              const SizedBox(width: 10),
-              Text('CANCEL',
-                  style: TextStyle(
-                      color: primaryColor, fontWeight: FontWeight.bold)),
-            ]),
+            child: Row(children: [Icon(Icons.cancel, color: primaryColor), const SizedBox(width: 10), Text('CANCEL', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold))]),
           ),
           SimpleDialogOption(
             onPressed: () => Navigator.pop(context, 1),
-            child: Row(children: [
-              Icon(Icons.check_circle, color: primaryColor),
-              const SizedBox(width: 10),
-              Text('YES',
-                  style: TextStyle(
-                      color: primaryColor, fontWeight: FontWeight.bold)),
-            ]),
+            child: Row(children: [Icon(Icons.check_circle, color: primaryColor), const SizedBox(width: 10), Text('YES', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold))]),
           ),
         ],
       ),
@@ -72,19 +50,11 @@ class ChatListState extends State<ChatList> {
     if (result == 1) exit(0);
   }
 
-  Widget _buildItem(BuildContext context, UiBuddy buddy) {
-    final Widget avatar = buddy.vCard?.imageData == null
-        ? CircleAvatar(
-            radius: 25,
-            child: Text(
-              buddy.name.isNotEmpty ? buddy.name[0] : '?',
-              style: TextStyle(color: primaryColor),
-            ),
-          )
-        : CircleAvatar(
-            radius: 25,
-            backgroundImage: MemoryImage(buddy.vCard!.imageData!),
-          );
+  Widget _buildItem(UiBuddy buddy) {
+    final imageData = buddy.vCard?.imageData;
+    final Widget avatar = imageData == null
+        ? CircleAvatar(radius: 25, child: Text(buddy.name.isNotEmpty ? buddy.name[0] : '?'))
+        : CircleAvatar(radius: 25, backgroundImage: MemoryImage(imageData));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10, left: 5, right: 5),
@@ -92,27 +62,20 @@ class ChatListState extends State<ChatList> {
         style: TextButton.styleFrom(
           backgroundColor: greyColor2,
           padding: const EdgeInsets.fromLTRB(25, 10, 25, 10),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         onPressed: () {},
         child: Row(
           children: [
-            Material(
-              borderRadius: BorderRadius.circular(5),
-              clipBehavior: Clip.hardEdge,
-              child: avatar,
-            ),
+            Material(borderRadius: BorderRadius.circular(5), clipBehavior: Clip.hardEdge, child: avatar),
             const SizedBox(width: 20),
             Flexible(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Name: ${buddy.name.isNotEmpty ? buddy.name : 'No Info'}',
-                      style: TextStyle(color: primaryColor)),
+                  Text('Name: ${buddy.name.isNotEmpty ? buddy.name : 'No Info'}', style: TextStyle(color: primaryColor)),
                   const SizedBox(height: 4),
-                  Text('Jid: ${buddy.jid.fullJid}',
-                      style: TextStyle(color: primaryColor)),
+                  Text('Jid: ${buddy.jidString}', style: TextStyle(color: primaryColor, fontSize: 12)),
                 ],
               ),
             ),
@@ -126,29 +89,23 @@ class ChatListState extends State<ChatList> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('MAIN',
-            style: TextStyle(
-                color: primaryColor, fontWeight: FontWeight.bold)),
+        title: Text('MAIN', style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
         centerTitle: true,
       ),
-      body: WillPopScope(
-        onWillPop: _onBackPress,
+      body: PopScope(
+        canPop: false,
+        onPopInvoked: (_) => _openDialog(),
         child: StreamBuilder<List<UiBuddy>>(
           initialData: const [],
           stream: _rosterRepo.rosterStream,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(themeColor),
-                ),
-              );
+              return Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(themeColor)));
             }
             return ListView.builder(
               padding: const EdgeInsets.all(10),
               itemCount: snapshot.data!.length,
-              itemBuilder: (context, index) =>
-                  _buildItem(context, snapshot.data![index]),
+              itemBuilder: (_, index) => _buildItem(snapshot.data![index]),
             );
           },
         ),
