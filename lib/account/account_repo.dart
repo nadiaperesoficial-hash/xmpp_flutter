@@ -66,10 +66,12 @@ class AccountRepoImpl implements AccountRepo {
     uiAccount._client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
+    // Listener para sucesso na negociação
     client.addEventHandler<dynamic>('streamNegotiated', (_) {
       uiAccount.accountState = AccountRegistered(account: account);
     });
 
+    // Listener para desconexão inesperada
     client.addEventHandler<dynamic>('disconnected', (_) {
       uiAccount.accountState = AccountUnregistered(
         account: account,
@@ -77,14 +79,29 @@ class AccountRepoImpl implements AccountRepo {
       );
     });
 
-    client.addEventHandler<dynamic>('connectionFailed', (_) {
+    // Listener para falha na conexão (captura o erro)
+    client.addEventHandler<dynamic>('connectionFailed', (error) {
+      String msg = 'Falha na conexão';
+      if (error is Exception) {
+        msg = error.toString().replaceAll('Exception: ', '');
+      } else if (error is String) {
+        msg = error;
+      }
       uiAccount.accountState = AccountUnregistered(
         account: account,
-        message: 'Falha na conexão',
+        message: msg,
       );
     });
 
-    client.connect();
+    // 🔽 Tenta conectar e captura qualquer erro não tratado
+    client.connect().catchError((e) {
+      String msg = e.toString().replaceAll('Exception: ', '');
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: msg,
+      );
+    });
+
     return uiAccount;
   }
 
