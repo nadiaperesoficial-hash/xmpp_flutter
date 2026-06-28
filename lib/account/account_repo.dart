@@ -61,38 +61,25 @@ class AccountRepoImpl implements AccountRepo {
       password: account.password,
       host: account.domain,
       port: account.port,
+      reconnectionPolicy: NeverReconnectionPolicy(),
     );
 
     uiAccount._client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    client.addEventHandler<dynamic>('streamNegotiated', (_) {
-      uiAccount.accountState = AccountRegistered(account: account);
-    });
-
-    client.addEventHandler<dynamic>('disconnected', (_) {
-      uiAccount.accountState = AccountUnregistered(
-        account: account,
-        message: 'Conexão encerrada',
-      );
-    });
-
-    client.addEventHandler<dynamic>('connectionFailed', (error) {
-      String msg = 'Falha na conexão';
-      if (error is Exception) {
-        msg = error.toString().replaceAll('Exception: ', '');
-      } else if (error is String) {
-        msg = error;
+    client.addEventHandler<TransportState>('state', (state) {
+      if (state == null) return;
+      if (state == TransportState.connected) {
+        uiAccount.accountState = AccountRegistered(account: account);
+      } else if (state == TransportState.disconnected) {
+        uiAccount.accountState = AccountUnregistered(
+          account: account,
+          message: 'Conexão encerrada',
+        );
       }
-      uiAccount.accountState = AccountUnregistered(
-        account: account,
-        message: msg,
-      );
     });
 
-    // 🔽 CHAMADA SEGURA – sem atribuição, sem catchError que cause erro
     client.connect();
-
     return uiAccount;
   }
 
