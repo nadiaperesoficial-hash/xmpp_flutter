@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:simple_chat/const.dart';
 import 'package:simple_chat/roster/roster_repo.dart';
