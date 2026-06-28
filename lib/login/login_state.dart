@@ -1,28 +1,25 @@
-import 'package:equatable/equatable.dart';
+part of 'login_bloc.dart';
 
-abstract class LoginState extends Equatable {
-  const LoginState();
-  @override
-  List<Object?> get props => [];
+abstract class LoginState {}
+
+class LoginInitial extends LoginState {}
+
+class LoginLoading extends LoginState {}
+
+class LoginSuccess extends LoginState {}
+
+class LoginFailure extends LoginState {
+  final String message;
+  LoginFailure({required this.message});
 }
 
-class LoginInitial extends LoginState { const LoginInitial(); }
-class LoginLoading extends LoginState { const LoginLoading(); }
-class RegisterLoading extends LoginState { const RegisterLoading(); }
-class RegisterSuccess extends LoginState { const RegisterSuccess(); }
+class RegisterLoading extends LoginState {}
 
-class LoginExtendedChanged extends LoginState {
-  final bool loginExtendValue;
-  const LoginExtendedChanged({required this.loginExtendValue});
-  @override
-  List<Object?> get props => [loginExtendValue];
-}
+class RegisterSuccess extends LoginState {}
 
-class RememberMeChanged extends LoginState {
-  final bool rememberMeValue;
-  const RememberMeChanged({required this.rememberMeValue});
-  @override
-  List<Object?> get props => [rememberMeValue];
+class RegisterFailure extends LoginState {
+  final String message;
+  RegisterFailure({required this.message});
 }
 
 class LoginDataLoaded extends LoginState {
@@ -32,21 +29,23 @@ class LoginDataLoaded extends LoginState {
   final int port;
   final bool wasExtended;
   final bool rememberMe;
-  const LoginDataLoaded({required this.username, required this.password, required this.domain, required this.port, required this.wasExtended, required this.rememberMe});
-  @override
-  List<Object?> get props => [username, password, domain, port, wasExtended, rememberMe];
+
+  const LoginDataLoaded({
+    required this.username,
+    required this.password,
+    required this.domain,
+    required this.port,
+    required this.wasExtended,
+    required this.rememberMe,
+  });
 }
 
-class LoginFailure extends LoginState {
-  final String? message;
-  const LoginFailure({this.message});
-  @override
-  List<Object?> get props => [message];
+class LoginExtendedChanged extends LoginState {
+  final bool loginExtendValue;
+  LoginExtendedChanged({required this.loginExtendValue});
 }
 
-class RegisterFailure extends LoginState {
-  final String message;
-  const RegisterFailure({required this.message});
-  @override
-  List<Object?> get props => [message];
+class RememberMeChanged extends LoginState {
+  final bool rememberMeValue;
+  RememberMeChanged({required this.rememberMeValue});
 }
