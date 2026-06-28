@@ -120,12 +120,17 @@ class _LoginFormState extends State<LoginForm> {
         } else if (state is LoginExtendedChanged) {
           _isExtended = state.loginExtendValue;
         } else if (state is LoginFailure) {
-          _authMessage = state.message ?? 'Falha ao conectar';
+          _authMessage = state.message;
         } else if (state is RegisterFailure) {
           _authMessage = state.message;
         } else if (state is RegisterSuccess) {
           _authMessage = null;
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Conta criada! Entrando...'), backgroundColor: Colors.green));
+        } else if (state is LoginSuccess) {
+          // Navega para a tela principal
+          Navigator.pushReplacementNamed(context, '/main');
+        } else if (state is LoginLoading) {
+          _authMessage = null; // limpa mensagens antigas
         }
       },
       builder: (context, state) {
@@ -156,7 +161,6 @@ class _LoginFormState extends State<LoginForm> {
           TextButton(onPressed: () => setState(() { _isRegisterMode = true; _authMessage = null; if (!_isExtended) _isExtended = true; }), child: Text('Criar conta', style: TextStyle(color: _isRegisterMode ? Colors.lightBlueAccent : Colors.grey, fontWeight: _isRegisterMode ? FontWeight.bold : FontWeight.normal))),
         ]),
         const SizedBox(height: 24),
-        // 🔽 CAMPO DE USUÁRIO – HINT GENÉRICO, SEM DADOS PESSOAIS
         TextFormField(
           controller: _usernameController,
           keyboardType: _isExtended ? TextInputType.text : TextInputType.emailAddress,
@@ -164,8 +168,8 @@ class _LoginFormState extends State<LoginForm> {
             hintText: _isExtended ? 'usuário' : 'usuario@servidor.com',
             prefixIcon: const Icon(Icons.person_outline),
             contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(32))
-          )
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(32)),
+          ),
         ),
         const SizedBox(height: 12),
         TextFormField(controller: _passwordController, obscureText: true, decoration: InputDecoration(hintText: 'Senha', prefixIcon: const Icon(Icons.lock_outline), contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(32)))),
