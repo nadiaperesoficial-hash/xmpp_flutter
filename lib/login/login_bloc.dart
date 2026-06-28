@@ -33,36 +33,70 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
   void _onLoginPressed(LoginButtonPressed event, Emitter<LoginState> emit) {
     String username, password, domain;
     int port;
+
     if (_extended) {
-      username = event.username;
+      username = event.username.trim();
       password = event.password;
-      domain = event.domain;
+      domain = event.domain.trim();
       port = event.port;
     } else {
-      final parts = event.username.split('@');
-      username = parts[0];
-      domain = parts.length > 1 ? parts[1] : '';
+      // Modo básico: aceita usuário@dominio ou só usuário
+      final input = event.username.trim();
+      if (input.contains('@')) {
+        final parts = input.split('@');
+        username = parts[0];
+        domain = parts[1];
+      } else {
+        // Sem @ — pede domínio
+        emit(LoginFailure(message: 'Use o formato usuário@servidor.com ou ative o modo Avançado'));
+        return;
+      }
       password = event.password;
       port = _settings.getDefaultPort();
     }
+
+    if (username.isEmpty || domain.isEmpty) {
+      emit(LoginFailure(message: 'Preencha usuário e servidor'));
+      return;
+    }
+
     if (_rememberMe) {
       _settings.setString(Settings.username, username);
       _settings.setString(Settings.domain, domain);
       _settings.setString(Settings.password, password);
       _settings.setInt(Settings.port, port);
     }
-    accountBloc.add(Login(username: username, password: password, domain: domain, port: port));
+
+    accountBloc.add(Login(
+      username: username,
+      password: password,
+      domain: domain,
+      port: port,
+    ));
     emit(const LoginInitial());
   }
 
-  Future<void> _onRegisterPressed(RegisterButtonPressed event, Emitter<LoginState> emit) async {
+  Future<void> _onRegisterPressed(
+      RegisterButtonPressed event, Emitter<LoginState> emit) async {
     emit(const RegisterLoading());
     try {
-      await XmppRegistrar(domain: event.domain, host: event.domain, port: event.port, username: event.username, password: event.password).register();
+      await XmppRegistrar(
+        domain: event.domain,
+        host: event.domain,
+        port: event.port,
+        username: event.username,
+        password: event.password,
+      ).register();
       emit(const RegisterSuccess());
-      accountBloc.add(Login(username: event.username, password: event.password, domain: event.domain, port: event.port));
+      accountBloc.add(Login(
+        username: event.username,
+        password: event.password,
+        domain: event.domain,
+        port: event.port,
+      ));
     } catch (e) {
-      emit(RegisterFailure(message: e.toString().replaceAll('Exception: ', '')));
+      emit(RegisterFailure(
+          message: e.toString().replaceAll('Exception: ', '')));
     }
   }
 
@@ -72,40 +106,76 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     emit(LoginExtendedChanged(loginExtendValue: _extended));
   }
 
-  void _onRememberMePressed(RememberMePressed event, Emitter<LoginState> emit) {
+  void _onRememberMePressed(
+      RememberMePressed event, Emitter<LoginState> emit) {
     _rememberMe = event.rememberMeValue;
     _settings.setBool(Settings.rememberMe, _rememberMe);
     if (!_rememberMe) accountBloc.add(const ForgetMe());
     emit(RememberMeChanged(rememberMeValue: _rememberMe));
   }
 
-  void _onLoginDataLoaded(LoginDataLoadedEvent event, Emitter<LoginState> emit) {
+  void _onLoginDataLoaded(
+      LoginDataLoadedEvent event, Emitter<LoginState> emit) {
     _rememberMe = event.rememberMe;
     _extended = event.wasExtended;
-    emit(LoginDataLoaded(username: event.username, password: event.password, domain: event.domain, port: event.port, wasExtended: event.wasExtended, rememberMe: event.rememberMe));
+    emit(LoginDataLoaded(
+      username: event.username,
+      password: event.password,
+      domain: event.domain,
+      port: event.port,
+      wasExtended: event.wasExtended,
+      rememberMe: event.rememberMe,
+    ));
   }
 
-  void _onLoginDataShown(LoginDataShownEvent event, Emitter<LoginState> emit) => emit(const LoginInitial());
+  void _onLoginDataShown(
+      LoginDataShownEvent event, Emitter<LoginState> emit) {
+    emit(const LoginInitial());
+  }
 
-  void _onLoginFailure(LoginFailureEvent event, Emitter<LoginState> emit) => emit(LoginFailure(message: event.message));
+  void _onLoginFailure(LoginFailureEvent event, Emitter<LoginState> emit) {
+    emit(LoginFailure(message: event.message));
+  }
 
   void _initData() {
     _settings.isInitialized().then((_) {
       if (_settings.getBool(Settings.rememberMe) == true) {
+        final u = _settings.getString(Settings.username) ?? '';
+        final d = _settings.getString(Settings.domain) ?? '';
+        final p = _settings.getString(Settings.password) ?? '';
+        final port =
+            _settings.getInt(Settings.port) ?? _settings.getDefaultPort();
+        final wasExtended =
+            _settings.getBool(Settings.wasExtended) ?? false;
+        _extended = wasExtended;
+        // Reconstrói JID completo para campo de usuário no modo básico
+        final displayUser =
+            d.isNotEmpty ? '$u@$d' : u;
         add(LoginDataLoadedEvent(
-          username: _settings.getString(Settings.username) ?? '',
-          password: _settings.getString(Settings.password) ?? '',
-          domain: _settings.getString(Settings.domain) ?? '',
-          port: _settings.getInt(Settings.port) ?? _settings.getDefaultPort(),
-          wasExtended: _settings.getBool(Settings.wasExtended) ?? false,
+          username: displayUser,
+          password: p,
+          domain: d,
+          port: port,
+          wasExtended: wasExtended,
           rememberMe: true,
         ));
       } else {
-        add(LoginDataLoadedEvent(username: '', password: '', domain: '', port: _settings.getDefaultPort(), wasExtended: _settings.getBool(Settings.wasExtended) ?? false, rememberMe: false));
+        add(LoginDataLoadedEvent(
+          username: '',
+          password: '',
+          domain: '',
+          port: _settings.getDefaultPort(),
+          wasExtended:
+              _settings.getBool(Settings.wasExtended) ?? false,
+          rememberMe: false,
+        ));
       }
     });
   }
 
   @override
-  Future<void> close() { _accountSub?.cancel(); return super.close(); }
+  Future<void> close() {
+    _accountSub?.cancel();
+    return super.close();
+  }
 }
