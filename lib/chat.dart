@@ -2,7 +2,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:simple_chat/const.dart';
 import 'package:simple_chat/settings/settings.dart';
-import 'package:xmpp_stone/xmpp_stone.dart' as xmpp;
+// Import corrigido para o novo plugin
+import 'package:xmpp_plugin/xmpp_plugin.dart' as xmpp;
 import 'package:simple_chat/service_locator/service_locator.dart';
 
 const String _selfName = "Self Name";
@@ -10,104 +11,132 @@ const String _selfName = "Self Name";
 class Chat extends StatelessWidget {
   final xmpp.Buddy buddy;
 
-  Chat({Key key, @required this.buddy}) : super(key: key);
+  // Parâmetro key agora é opcional com Key?
+  const Chat({Key? key, required this.buddy}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return new Scaffold(
-      appBar: new AppBar(
-        title: new Text(
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
           'CHAT',
           style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
-      body: new ChatScreen(buddy: this.buddy),
+      body: ChatScreen(buddy: buddy),
     );
   }
 }
 
 class ChatMessage extends StatelessWidget {
-  ChatMessage({this.text, this.animationController, this.from});
-
-  final xmpp.Buddy from;
+  final xmpp.Buddy? from;
   final String text;
   final AnimationController animationController;
-  bool isIncoming = false;
+  final bool isIncoming; // Tornado final
+
+  const ChatMessage({
+    Key? key,
+    required this.text,
+    required this.animationController,
+    this.from,
+  }) : isIncoming = from != null, super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    String displayName =
-    (from != null) ? (from.name ?? from.jid.userAtDomain) : _selfName;
-    String initials = displayName[0] ?? "X";
-    List<Widget> children;
-    isIncoming = from != null;
-    Color contentColor = isIncoming ? greyColor : greyColor2;
-    Widget avatar = new Container(
+    final displayName = (from != null)
+        ? (from!.name ?? from!.jid.userAtDomain)
+        : _selfName;
+    final initials = displayName[0] ?? "X";
+    final contentColor = isIncoming ? greyColor : greyColor2;
+
+    final avatar = Container(
       margin: const EdgeInsets.only(right: 16.0),
-      child: new CircleAvatar(child: new Text(initials)),
+      child: CircleAvatar(child: Text(initials)),
     );
-    Widget nameWidget = new Text(displayName, style: Theme.of(context).textTheme
-        .subhead);
-    Widget textWidget = new Container(
+
+    final nameWidget = Text(
+      displayName,
+      // subhead substituído por titleMedium
+      style: Theme.of(context).textTheme.titleMedium,
+    );
+
+    final textWidget = Container(
       margin: const EdgeInsets.only(top: 5.0),
-      child: new Text(text),
+      child: Text(text),
     );
-    List<Widget> messageChildren;
+
+    final List<Widget> messageChildren;
     if (from == null) {
       messageChildren = [textWidget];
     } else {
       messageChildren = [nameWidget, textWidget];
     }
-    Widget messageContent = Container(
+
+    final messageContent = Container(
       alignment: Alignment.centerRight,
-      padding: EdgeInsets.only(top:10.0, bottom: 10, right: isIncoming ? 10 : 20, left: 10),
-      decoration : BoxDecoration(color: contentColor, borderRadius: BorderRadius.circular(8.0)),
-      child: new Column(
-          mainAxisSize: MainAxisSize.max,
-          crossAxisAlignment: (from == null) ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: messageChildren
+      padding: EdgeInsets.only(
+        top: 10.0,
+        bottom: 10,
+        right: isIncoming ? 10 : 20,
+        left: 10,
+      ),
+      decoration: BoxDecoration(
+        color: contentColor,
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment:
+            (from == null) ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: messageChildren,
       ),
     );
+
+    final List<Widget> children;
     if (from == null) {
       children = [messageContent];
     } else {
       children = [avatar, messageContent];
     }
 
-
-    return new SizeTransition(
-        sizeFactor: new CurvedAnimation(
-            parent: animationController, curve: Curves.easeOut),
-        axisAlignment: 0.0,
-        child: new Container(
-          margin: const EdgeInsets.symmetric(vertical: 10.0),
-          child: new Row(
-            mainAxisAlignment: isIncoming ? MainAxisAlignment.start : MainAxisAlignment.end,
-            children: children,
-          ),
-        ));
+    return SizeTransition(
+      sizeFactor: CurvedAnimation(
+        parent: animationController,
+        curve: Curves.easeOut,
+      ),
+      axisAlignment: 0.0,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 10.0),
+        child: Row(
+          mainAxisAlignment:
+              isIncoming ? MainAxisAlignment.start : MainAxisAlignment.end,
+          children: children,
+        ),
+      ),
+    );
   }
 }
 
 class ChatScreen extends StatefulWidget {
   final xmpp.Buddy buddy;
 
-  ChatScreen({Key key, @required this.buddy}) : super(key: key);
+  const ChatScreen({Key? key, required this.buddy}) : super(key: key);
 
   @override
-  State createState() => new ChatScreenState(buddy: buddy);
+  State<ChatScreen> createState() => ChatScreenState(buddy: buddy);
 }
 
 class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
-  ChatScreenState({Key key, @required this.buddy});
+  final xmpp.Buddy buddy;
   final _settings = sl.get<Settings>();
-  xmpp.Buddy buddy;
-  xmpp.MessageHandler _messageHandler;
+  xmpp.MessageHandler? _messageHandler; // Tornado nullable
 
   final List<ChatMessage> _messages = <ChatMessage>[];
-  final TextEditingController _textController = new TextEditingController();
+  final TextEditingController _textController = TextEditingController();
   bool _isComposing = false;
+
+  ChatScreenState({required this.buddy});
 
   @override
   void initState() {
@@ -120,11 +149,11 @@ class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     setState(() {
       _isComposing = false;
     });
-    _messageHandler.sendMessage(buddy.jid, text);
-    ChatMessage message = new ChatMessage(
+    _messageHandler?.sendMessage(buddy.jid, text); // Use ?. para segurança
+    final message = ChatMessage(
       text: text,
-      animationController: new AnimationController(
-        duration: new Duration(milliseconds: 700),
+      animationController: AnimationController(
+        duration: const Duration(milliseconds: 700),
         vsync: this,
       ),
     );
@@ -135,98 +164,110 @@ class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   void _handleIncoming(xmpp.MessageStanza messageStanza) {
-    ChatMessage message = new ChatMessage(
-        text: messageStanza.body,
-        animationController: new AnimationController(
-          duration: new Duration(milliseconds: 700),
-          vsync: this,
-        ),
-        from: buddy);
+    final message = ChatMessage(
+      text: messageStanza.body,
+      animationController: AnimationController(
+        duration: const Duration(milliseconds: 700),
+        vsync: this,
+      ),
+      from: buddy,
+    );
     setState(() {
       _messages.insert(0, message);
     });
     message.animationController.forward();
   }
 
+  @override
   void dispose() {
-    for (ChatMessage message in _messages)
+    for (var message in _messages) {
       message.animationController.dispose();
+    }
+    _textController.dispose(); // Boa prática liberar o controller
     super.dispose();
   }
 
   Widget _buildTextComposer() {
-    return new IconTheme(
-      data: new IconThemeData(color: Theme.of(context).accentColor),
-      child: new Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8.0),
-          child: new Row(children: <Widget>[
-            new Flexible(
-              child: new TextField(
-                controller: _textController,
-                onChanged: (String text) {
-                  setState(() {
-                    _isComposing = text.length > 0;
-                  });
-                },
-                onSubmitted: _handleSubmitted,
-                decoration:
-                new InputDecoration.collapsed(hintText: "Send a message"),
+    // accentColor substituído por colorScheme.secondary
+    final iconColor = Theme.of(context).colorScheme.secondary;
+    return IconTheme(
+      data: IconThemeData(color: iconColor),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Row(children: [
+          Flexible(
+            child: TextField(
+              controller: _textController,
+              onChanged: (String text) {
+                setState(() {
+                  _isComposing = text.isNotEmpty;
+                });
+              },
+              onSubmitted: _handleSubmitted,
+              decoration: const InputDecoration.collapsed(
+                hintText: "Send a message",
               ),
             ),
-            new Container(
-                margin: new EdgeInsets.symmetric(horizontal: 4.0),
-                child: Theme.of(context).platform == TargetPlatform.iOS
-                    ? new CupertinoButton(
-                  child: new Text("Send"),
-                  onPressed: _isComposing
-                      ? () => _handleSubmitted(_textController.text)
-                      : null,
-                )
-                    : new IconButton(
-                  icon: new Icon(Icons.send),
-                  onPressed: _isComposing
-                      ? () => _handleSubmitted(_textController.text)
-                      : null,
-                )),
-          ]),
-          decoration: Theme.of(context).platform == TargetPlatform.iOS
-              ? new BoxDecoration(
-              border:
-              new Border(top: new BorderSide(color: Colors.grey[200])))
-              : null),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Theme.of(context).platform == TargetPlatform.iOS
+                ? CupertinoButton(
+                    child: const Text("Send"),
+                    onPressed: _isComposing
+                        ? () => _handleSubmitted(_textController.text)
+                        : null,
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.send),
+                    onPressed: _isComposing
+                        ? () => _handleSubmitted(_textController.text)
+                        : null,
+                  ),
+          ),
+        ]),
+        decoration: Theme.of(context).platform == TargetPlatform.iOS
+            ? BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey[200]!)),
+              )
+            : null,
+      ),
     );
   }
 
+  @override
   Widget build(BuildContext context) {
-    return new Scaffold(
-      body: new Container(
-          child: new Column(children: <Widget>[
-            new Flexible(
-                child: new ListView.builder(
-                  padding: new EdgeInsets.all(8.0),
-                  reverse: true,
-                  itemBuilder: (_, int index) => _messages[index],
-                  itemCount: _messages.length,
-                )),
-            new Divider(height: 1.0),
-            new Container(
-              decoration: new BoxDecoration(color: Theme.of(context).cardColor),
-              child: _buildTextComposer(),
+    return Scaffold(
+      body: Container(
+        child: Column(children: [
+          Flexible(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(8.0),
+              reverse: true,
+              itemBuilder: (_, int index) => _messages[index],
+              itemCount: _messages.length,
             ),
-          ]),
-          decoration: Theme.of(context).platform == TargetPlatform.iOS
-              ? new BoxDecoration(
-              border:
-              new Border(top: new BorderSide(color: Colors.grey[200])))
-              : null), //new
+          ),
+          const Divider(height: 1.0),
+          Container(
+            decoration: BoxDecoration(color: Theme.of(context).cardColor),
+            child: _buildTextComposer(),
+          ),
+        ]),
+        decoration: Theme.of(context).platform == TargetPlatform.iOS
+            ? BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey[200]!)),
+              )
+            : null,
+      ),
     );
   }
 
-  Future _initMessageHandler() async {
-    xmpp.Connection connection =
-    xmpp.Connection.getInstance(await _settings.getAccountData());
+  Future<void> _initMessageHandler() async {
+    final connection =
+        xmpp.Connection.getInstance(await _settings.getAccountData());
     _messageHandler = xmpp.MessageHandler.getInstance(connection);
-    _messageHandler.messagesStream.listen((message) {
+    _messageHandler?.messagesStream.listen((message) {
       if (message.fromJid.userAtDomain == buddy.jid.userAtDomain &&
           message.body != null) {
         _handleIncoming(message);
