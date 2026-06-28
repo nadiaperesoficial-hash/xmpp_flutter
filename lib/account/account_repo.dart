@@ -61,7 +61,6 @@ class AccountRepoImpl implements AccountRepo {
       password: account.password,
       host: account.domain,
       port: account.port,
-      reconnectionPolicy: NeverReconnectionPolicy(),
     );
 
     uiAccount._client = client;
