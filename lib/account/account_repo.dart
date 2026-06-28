@@ -57,10 +57,10 @@ class AccountRepoImpl implements AccountRepo {
     _accountSubject.add(_accountsList);
 
     final client = Whixp(
-      jabberID: '${account.username}@${account.domain}',
+      jabberID: '${account.username}@${account.domain}/simple_chat',
       password: account.password,
-      host: account.domain,
-      port: account.port,
+      internalDatabasePath: 'whixp_${account.username}',
+      reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
     );
 
     uiAccount._client = client;
