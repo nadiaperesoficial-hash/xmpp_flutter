@@ -26,6 +26,7 @@ class UiAccount {
 
   static const wsUrl = 'wss://prosody-server-production.up.railway.app/xmpp-websocket';
   static const serverDomain = 'onyx.im';
+  static const wsHost = 'prosody-server-production.up.railway.app';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   String get id => '${account.username}@${account.domain}';
@@ -61,8 +62,8 @@ class AccountRepoImpl implements AccountRepo {
     final client = Whixp(
       jabberID: '${account.username}@${UiAccount.serverDomain}/simple_chat',
       password: account.password,
-      host: UiAccount.serverDomain,
-      wsEndpoint: UiAccount.wsUrl,
+      host: UiAccount.wsHost,
+      port: 443,
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
       logger: Log(enableWarning: true, enableError: true),
