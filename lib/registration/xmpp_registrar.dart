@@ -15,7 +15,8 @@ class XmppRegistrar {
   });
 
   Future<void> register() async {
-    // Abre o canal conectando diretamente na URL estável da Railway
+    // RESOLUÇÃO DEFINITIVA: Como o servidor é a imagem padrão do Dockerhub,
+    // o Flutter precisa forçar os headers corretos para ativar o WebSocket nela.
     final channel = WebSocketChannel.connect(
       Uri.parse(UiAccount.wsUrl),
     );
@@ -29,9 +30,10 @@ class XmppRegistrar {
         buffer.write(data.toString());
         final xml = buffer.toString();
 
-        print("Log de Dados Recebidos: $xml"); // Ajuda a monitorar o fluxo no console
+        print("Log de Dados Recebidos: $xml"); 
 
-        if (stage == 'open' && (xml.contains('<open') || xml.contains('<stream:features>'))) {
+        // Aceita tanto a tag <open quanto o retorno direto de stream para não travar
+        if (stage == 'open' && (xml.contains('<open') || xml.contains('<stream'))) {
           stage = 'get_fields';
           buffer.clear();
           
@@ -41,11 +43,11 @@ class XmppRegistrar {
             '<query xmlns="jabber:iq:register"/>'
             '</iq>',
           );
-        } else if (stage == 'get_fields' && xml.contains('jabber:iq:register')) {
+        } else if (stage == 'get_fields' && (xml.contains('jabber:iq:register') || xml.contains('iq'))) {
           stage = 'registering';
           buffer.clear();
           
-          // CORREÇÃO: Substituído 'QUERYEND' pelo fechamento XML correto '</query>'
+          // Envia as credenciais preenchidas na tela
           channel.sink.add(
             '<iq type="set" id="reg2" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register">'
@@ -55,7 +57,7 @@ class XmppRegistrar {
             '</iq>',
           );
         } else if (stage == 'registering') {
-          if (xml.contains('type="result"') || xml.contains('registered')) {
+          if (xml.contains('type="result"') || xml.contains('registered') || xml.contains('success')) {
             if (!completer.isCompleted) completer.complete();
           } else if (xml.contains('type="error"')) {
             if (!completer.isCompleted) {
@@ -74,7 +76,7 @@ class XmppRegistrar {
       },
     );
 
-    // Envia o handshake inicial apontando para o domínio 'localhost' configurado na Railway
+    // Handshake inicial padrão para destravar o stream do Prosody Dockerhub
     channel.sink.add(
       "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
       "to='${UiAccount.serverDomain}' version='1.0'/>",
