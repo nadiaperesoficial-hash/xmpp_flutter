@@ -17,6 +17,7 @@ class XmppRegistrar {
   Future<void> register() async {
     final channel = WebSocketChannel.connect(
       Uri.parse(UiAccount.wsUrl),
+      protocols: ['xmpp'],
     );
 
     final completer = Completer<void>();
@@ -28,31 +29,28 @@ class XmppRegistrar {
         buffer.write(data.toString());
         final xml = buffer.toString();
 
-        print("Log de Dados Recebidos: $xml"); 
-
-        if (stage == 'open' && (xml.contains('<open') || xml.contains('<stream'))) {
+        if (stage == 'open' && xml.contains('<open')) {
           stage = 'get_fields';
           buffer.clear();
-          
           channel.sink.add(
             '<iq type="get" id="reg1" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register"/>'
             '</iq>',
           );
-        } else if (stage == 'get_fields' && xml.contains('jabber:iq:register')) {
+        } else if (stage == 'get_fields' &&
+            xml.contains('jabber:iq:register')) {
           stage = 'registering';
           buffer.clear();
-          
           channel.sink.add(
             '<iq type="set" id="reg2" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register">'
             '<username>$username</username>'
             '<password>$password</password>'
-            '</query>' 
+            '</query>'
             '</iq>',
           );
         } else if (stage == 'registering') {
-          if (xml.contains('type="result"') || xml.contains('registered')) {
+          if (xml.contains('type="result"')) {
             if (!completer.isCompleted) completer.complete();
           } else if (xml.contains('type="error"')) {
             if (!completer.isCompleted) {
@@ -66,7 +64,8 @@ class XmppRegistrar {
       },
       onDone: () {
         if (!completer.isCompleted) {
-          completer.completeError(Exception('Conexão encerrada inesperadamente pelo servidor'));
+          completer.completeError(
+              Exception('Conexão encerrada inesperadamente'));
         }
       },
     );
@@ -78,12 +77,13 @@ class XmppRegistrar {
 
     try {
       await completer.future.timeout(
-        const Duration(seconds: 20),
+        const Duration(seconds: 30),
         onTimeout: () => throw Exception('Timeout ao registrar conta'),
       );
     } finally {
       try {
-        channel.sink.add("<close xmlns='urn:ietf:params:xml:ns:xmpp-websocket'/>");
+        channel.sink
+            .add("<close xmlns='urn:ietf:params:xml:ns:xmpp-websocket'/>");
         await channel.sink.close();
       } catch (_) {}
     }
