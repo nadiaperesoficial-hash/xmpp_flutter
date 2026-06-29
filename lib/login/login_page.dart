@@ -3,7 +3,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:simple_chat/account/account.dart';
 import 'package:simple_chat/login/login_bloc.dart';
 import 'package:simple_chat/login/login_form.dart';
-import 'package:simple_chat/login/login_state.dart';
 
 class LoginPage extends StatefulWidget {
   static const String tag = 'login';
@@ -76,7 +75,6 @@ class _LoginPageState extends State<LoginPage> {
                   child: LoginForm(loginBloc: _loginBloc),
                 ),
               ),
-              // Debug log visível
               if (_debugLog.isNotEmpty)
                 Container(
                   width: double.infinity,
@@ -88,9 +86,8 @@ class _LoginPageState extends State<LoginPage> {
                     child: Text(
                       _debugLog,
                       style: const TextStyle(
-                        color: Colors.greenBright,
+                        color: Color(0xFF00FF00),
                         fontSize: 10,
-                        fontFamily: 'monospace',
                       ),
                     ),
                   ),
