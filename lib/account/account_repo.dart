@@ -61,17 +61,16 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.removeWhere((a) => a == uiAccount);
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
-
     uiAccount.accountState = AccountRegistering(account: account);
     _connect(uiAccount);
-
     return uiAccount;
   }
 
   void _connect(UiAccount uiAccount) {
     final account = uiAccount.account;
     final buffer = StringBuffer();
-    String stage = 'open';
+    bool authenticated = false;
+    bool bound = false;
 
     try {
       final channel = WebSocketChannel.connect(
@@ -80,68 +79,99 @@ class AccountRepoImpl implements AccountRepo {
       );
       uiAccount._channel = channel;
 
+      void send(String xml) => channel.sink.add(xml);
+
+      void processXml(String xml) {
+        // Fase 1: servidor confirmou abertura do stream
+        if (xml.contains('<open') && !authenticated) {
+          // Verifica se já veio features junto
+          if (xml.contains('stream:features') || xml.contains('<features')) {
+            _sendAuth(account, send);
+          }
+          // Se não veio features ainda, aguarda próxima mensagem
+          return;
+        }
+
+        // Fase 2: features em mensagem separada
+        if (!authenticated &&
+            (xml.contains('stream:features') || xml.contains('<features')) &&
+            !xml.contains('<open')) {
+          _sendAuth(account, send);
+          return;
+        }
+
+        // Fase 3: resultado da autenticação
+        if (!authenticated && xml.contains('<success')) {
+          authenticated = true;
+          buffer.clear();
+          // Reabre stream
+          send(
+            "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
+            "to='${UiAccount.serverDomain}' version='1.0'/>",
+          );
+          return;
+        }
+
+        if (!authenticated && xml.contains('<failure')) {
+          uiAccount.accountState = AccountUnregistered(
+            account: account,
+            message: '[auth] Usuário ou senha incorretos',
+          );
+          return;
+        }
+
+        // Fase 4: segundo <open> após reautenticação
+        if (authenticated && !bound && xml.contains('<open')) {
+          send(
+            "<iq type='set' id='bind1'>"
+            "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
+            "<resource>simple_chat</resource>"
+            "</bind>"
+            "</iq>",
+          );
+          return;
+        }
+
+        // Features após reautenticação — envia bind
+        if (authenticated && !bound &&
+            (xml.contains('stream:features') || xml.contains('<features'))) {
+          send(
+            "<iq type='set' id='bind1'>"
+            "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
+            "<resource>simple_chat</resource>"
+            "</bind>"
+            "</iq>",
+          );
+          return;
+        }
+
+        // Fase 5: bind confirmado
+        if (authenticated && !bound &&
+            (xml.contains('id=\'bind1\'') || xml.contains('id="bind1"')) &&
+            xml.contains('type=\'result\'') || xml.contains('type="result"') && xml.contains('bind')) {
+          bound = true;
+          send(
+            "<iq type='set' id='sess1'>"
+            "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
+            "</iq>",
+          );
+          return;
+        }
+
+        // Fase 6: session ou conectado
+        if (bound && (xml.contains('id=\'sess1\'') || xml.contains('id="sess1"') ||
+            xml.contains('type=\'result\'') || xml.contains('type="result"'))) {
+          send("<presence/>");
+          uiAccount.accountState = AccountRegistered(account: account);
+        }
+      }
+
       channel.stream.listen(
         (data) {
           buffer.write(data.toString());
           final xml = buffer.toString();
-
-          if (stage == 'open' && xml.contains('<open')) {
-            stage = 'features';
-            buffer.clear();
-          } else if (stage == 'features' && xml.contains('stream:features')) {
-            stage = 'auth';
-            buffer.clear();
-            // SASL PLAIN
-            final creds = base64.encode(
-              utf8.encode('\x00${account.username}\x00${account.password}'),
-            );
-            channel.sink.add(
-              "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' "
-              "mechanism='PLAIN'>$creds</auth>",
-            );
-          } else if (stage == 'auth') {
-            if (xml.contains('<success')) {
-              stage = 'reopen';
-              buffer.clear();
-              // Reabre stream após autenticação
-              channel.sink.add(
-                "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
-                "to='${UiAccount.serverDomain}' version='1.0'/>",
-              );
-            } else if (xml.contains('<failure')) {
-              uiAccount.accountState = AccountUnregistered(
-                account: account,
-                message: '[auth] Usuário ou senha incorretos',
-              );
-            }
-          } else if (stage == 'reopen' && xml.contains('<open')) {
-            stage = 'bind';
-            buffer.clear();
-            // Bind resource
-            channel.sink.add(
-              "<iq type='set' id='bind1'>"
-              "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
-              "<resource>simple_chat</resource>"
-              "</bind>"
-              "</iq>",
-            );
-          } else if (stage == 'bind' && xml.contains('urn:ietf:params:xml:ns:xmpp-bind')) {
-            stage = 'session';
-            buffer.clear();
-            // Session
-            channel.sink.add(
-              "<iq type='set' id='sess1'>"
-              "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
-              "</iq>",
-            );
-          } else if (stage == 'session' && xml.contains('id=\'sess1\'') ||
-              (stage == 'session' && xml.contains('id="sess1"'))) {
-            stage = 'connected';
-            buffer.clear();
-            // Presence
-            channel.sink.add("<presence/>");
-            uiAccount.accountState = AccountRegistered(account: account);
-          }
+          buffer.clear();
+          processXml(xml);
         },
         onError: (e) {
           uiAccount.accountState = AccountUnregistered(
@@ -150,17 +180,17 @@ class AccountRepoImpl implements AccountRepo {
           );
         },
         onDone: () {
-          if (stage != 'connected') {
+          if (!bound) {
             uiAccount.accountState = AccountUnregistered(
               account: account,
-              message: '[ws done] Conexão encerrada na fase: $stage',
+              message: '[ws done] auth=$authenticated bound=$bound',
             );
           }
         },
       );
 
-      // Abre stream WebSocket XMPP
-      channel.sink.add(
+      // Abre stream
+      send(
         "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
         "to='${UiAccount.serverDomain}' version='1.0'/>",
       );
@@ -170,6 +200,16 @@ class AccountRepoImpl implements AccountRepo {
         message: '[connect error] ${e.toString()}',
       );
     }
+  }
+
+  void _sendAuth(XmppAccount account, void Function(String) send) {
+    final creds = base64.encode(
+      utf8.encode('\x00${account.username}\x00${account.password}'),
+    );
+    send(
+      "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' "
+      "mechanism='PLAIN'>$creds</auth>",
+    );
   }
 
   @override
