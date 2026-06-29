@@ -15,8 +15,6 @@ class XmppRegistrar {
   });
 
   Future<void> register() async {
-    // RESOLUÇÃO DEFINITIVA: Como o servidor é a imagem padrão do Dockerhub,
-    // o Flutter precisa forçar os headers corretos para ativar o WebSocket nela.
     final channel = WebSocketChannel.connect(
       Uri.parse(UiAccount.wsUrl),
     );
@@ -32,22 +30,19 @@ class XmppRegistrar {
 
         print("Log de Dados Recebidos: $xml"); 
 
-        // Aceita tanto a tag <open quanto o retorno direto de stream para não travar
         if (stage == 'open' && (xml.contains('<open') || xml.contains('<stream'))) {
           stage = 'get_fields';
           buffer.clear();
           
-          // Solicita os campos de registro ao servidor alvo (localhost)
           channel.sink.add(
             '<iq type="get" id="reg1" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register"/>'
             '</iq>',
           );
-        } else if (stage == 'get_fields' && (xml.contains('jabber:iq:register') || xml.contains('iq'))) {
+        } else if (stage == 'get_fields' && xml.contains('jabber:iq:register')) {
           stage = 'registering';
           buffer.clear();
           
-          // Envia as credenciais preenchidas na tela
           channel.sink.add(
             '<iq type="set" id="reg2" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register">'
@@ -57,7 +52,7 @@ class XmppRegistrar {
             '</iq>',
           );
         } else if (stage == 'registering') {
-          if (xml.contains('type="result"') || xml.contains('registered') || xml.contains('success')) {
+          if (xml.contains('type="result"') || xml.contains('registered')) {
             if (!completer.isCompleted) completer.complete();
           } else if (xml.contains('type="error"')) {
             if (!completer.isCompleted) {
@@ -76,7 +71,6 @@ class XmppRegistrar {
       },
     );
 
-    // Handshake inicial padrão para destravar o stream do Prosody Dockerhub
     channel.sink.add(
       "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
       "to='${UiAccount.serverDomain}' version='1.0'/>",
