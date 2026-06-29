@@ -15,7 +15,7 @@ class XmppRegistrar {
   });
 
   Future<void> register() async {
-    // CORREÇÃO DEFINITIVA: Removemos parâmetros de protocolo que barram handshakes no Hugging Face
+    // Abre o canal conectando diretamente na URL estável da Railway
     final channel = WebSocketChannel.connect(
       Uri.parse(UiAccount.wsUrl),
     );
@@ -35,7 +35,7 @@ class XmppRegistrar {
           stage = 'get_fields';
           buffer.clear();
           
-          // Solicita os campos de registro ao servidor onyx.im
+          // Solicita os campos de registro ao servidor alvo (localhost)
           channel.sink.add(
             '<iq type="get" id="reg1" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register"/>'
@@ -45,7 +45,7 @@ class XmppRegistrar {
           stage = 'registering';
           buffer.clear();
           
-          // Envia as credenciais informadas na tela
+          // CORREÇÃO: Substituído 'QUERYEND' pelo fechamento XML correto '</query>'
           channel.sink.add(
             '<iq type="set" id="reg2" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register">'
@@ -74,7 +74,7 @@ class XmppRegistrar {
       },
     );
 
-    // Envia o handshake inicial em conformidade com as regras do Prosody
+    // Envia o handshake inicial apontando para o domínio 'localhost' configurado na Railway
     channel.sink.add(
       "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
       "to='${UiAccount.serverDomain}' version='1.0'/>",
