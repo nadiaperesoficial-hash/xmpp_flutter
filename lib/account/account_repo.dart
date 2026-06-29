@@ -24,8 +24,8 @@ class UiAccount {
   Whixp? client;
   final _stateSubject = BehaviorSubject<AccountState>();
 
-  // Configurações de rede da nuvem e domínio XMPP
-  static const serverHost = 'laylaprs-meuchatxmpp.hf.space';
+  // CORREÇÃO 3: Mantida a constante 'wsUrl' para o seu xmpp_registrar.dart ler sem erro de getter
+  static const wsUrl = 'wss://laylaprs-meuchatxmpp.hf.space/xmpp-websocket';
   static const serverDomain = 'onyx.im';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
@@ -59,14 +59,13 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // Inicializa o cliente Whixp configurando os parâmetros de WebSocket nativos
+    // CORREÇÃO 1 e 2: Removidos parâmetros inválidos. O Whixp aceita a URL do WebSocket direta no 'host'
     final client = Whixp(
       jabberID: '${account.username}@${UiAccount.serverDomain}/simple_chat',
       password: account.password,
-      host: UiAccount.serverHost,             // URL real onde o servidor na nuvem responde
-      useWebSocket: true,                     // Diz à biblioteca para empacotar os dados em WSS
-      wsPath: '/xmpp-websocket',              // Rota interna configurada no Prosody Dockerfile
-      port: 443,                              // Porta segura padrão de tráfego web
+      host: UiAccount.wsUrl, // Injeta o endereço wss:// completo do Hugging Face diretamente aqui
+      port: 443,
+      useTLS: true,
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
       logger: Log(enableWarning: true, enableError: true),
@@ -75,7 +74,7 @@ class AccountRepoImpl implements AccountRepo {
     uiAccount.client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    // Evento correto disparado após o handshake do WebSocket e a autenticação SASL
+    // Evento correto pós-autenticação bem sucedida no Whixp
     client.addEventHandler<dynamic>('connected', (_) {
       client.sendPresence();
       uiAccount.accountState = AccountRegistered(account: account);
@@ -109,7 +108,7 @@ class AccountRepoImpl implements AccountRepo {
       );
     });
 
-    // Inicia a conexão de forma assíncrona utilizando os parâmetros injetados no construtor
+    // Inicialização limpa e correta do método connect sem parâmetros
     client.connect();
 
     return uiAccount;
