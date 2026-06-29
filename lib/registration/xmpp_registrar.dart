@@ -82,8 +82,8 @@ class XmppRegistrar {
       );
     } finally {
       try {
-        channel.sink
-            .add("<close xmlns='urn:ietf:params:xml:ns:xmpp-websocket'/>");
+        channel.sink.add(
+            "<close xmlns='urn:ietf:params:xml:ns:xmpp-websocket'/>");
         await channel.sink.close();
       } catch (_) {}
     }
