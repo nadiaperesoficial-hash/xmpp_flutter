@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:simple_chat/account/account_repo.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:whixp/whixp.dart';
 
 class XmppRegistrar {
   final String username;
@@ -15,92 +15,72 @@ class XmppRegistrar {
   });
 
   Future<void> register() async {
-    final channel = WebSocketChannel.connect(
-      Uri.parse(UiAccount.wsUrl),
-      protocols: ['xmpp'],
-    );
-
     final completer = Completer<void>();
-    final buffer = StringBuffer();
-    String stage = 'open';
 
-    channel.stream.listen(
-      (data) {
-        // Acumula os chunks XML recebidos no stream do WebSocket
-        buffer.write(data.toString());
-        final xml = buffer.toString();
+    // Inicializa uma instância temporária do Whixp dedicada ao registro
+    final client = Whixp(
+      jabberID: '$username@${UiAccount.serverDomain}/register_payload',
+      password: password,
+      host: UiAccount.wsUrl, // Utiliza a URL wss:// direta no host do Whixp
+      port: 443,
+      useTLS: true,
+      logger: Log(enableWarning: true, enableError: true),
+    );
 
-        if (stage == 'open' && xml.contains('<open')) {
-          stage = 'get_fields';
-          buffer.clear(); // Limpa apenas após validar a transição de estado
-          
-          // Solicita os campos de registro ao servidor onyx.im
-          channel.sink.add(
-            '<iq type="get" id="reg1" to="${UiAccount.serverDomain}">'
-            '<query xmlns="jabber:iq:register"/>'
-            '</iq>',
-          );
-        } else if (stage == 'get_fields' && xml.contains('jabber:iq:register')) {
-          stage = 'registering';
-          buffer.clear();
-          
-          // CORREÇÃO 1: Substituído 'QUERYEND' pelo fechamento XML correto '</query>'
-          channel.sink.add(
-            '<iq type="set" id="reg2" to="${UiAccount.serverDomain}">'
-            '<query xmlns="jabber:iq:register">'
-            '<username>$username</username>'
-            '<password>$password</password>'
-            '</query>' 
-            '</iq>',
-          );
-        } else if (stage == 'registering') {
-          // Intercepta a resposta definitiva do Prosody para o usuário no Flutter
-          if (xml.contains('type="result"')) {
-            if (!completer.isCompleted) completer.complete();
-          } else if (xml.contains('type="error"')) {
-            if (!completer.isCompleted) {
-              completer.completeError(Exception(_parseError(xml)));
-            }
-          }
-        }
-      },
-      onError: (e) {
-        if (!completer.isCompleted) completer.completeError(e);
-      },
-      onDone: () {
+    // Evento disparado quando o túnel WebSocket com o Hugging Face abre e valida os headers
+    client.addEventHandler<dynamic>('connected', (_) async {
+      try {
+        // Obtém o plugin In-Band Registration nativo do pacote Whixp
+        final registrationPlugin = client.getPlugin<InBandRegistration>('register');
+        
+        // Envia de forma estruturada a requisição XML de criação de conta
+        await registrationPlugin.registerAccount(username, password);
+        
+        if (!completer.isCompleted) completer.complete();
+        client.disconnect(); // Fecha a conexão de registro após o sucesso
+      } catch (e) {
         if (!completer.isCompleted) {
-          completer.completeError(Exception('Conexão encerrada inesperadamente'));
+          completer.completeError(Exception(_parseError(e.toString())));
         }
-      },
-    );
+        client.disconnect();
+      }
+    });
 
-    // Envia a estrofe de abertura forçando o namespace correto de WebSocket XMPP (RFC 7395)
-    channel.sink.add(
-      "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
-      "to='${UiAccount.serverDomain}' version='1.0'/>",
-    );
+    // Captura falhas de conexão de rede de forma proativa antes do timeout
+    client.addEventHandler<dynamic>('connectionFailed', (e) {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception('Falha ao conectar à infraestrutura da nuvem: $e'));
+      }
+    });
+
+    // Intercepta erros genéricos disparados pela biblioteca
+    client.addEventHandler<dynamic>('error', (e) {
+      if (!completer.isCompleted) {
+        completer.completeError(Exception(_parseError(e.toString())));
+      }
+    });
+
+    // Dispara o início assíncrono do túnel de conexão
+    client.connect();
 
     try {
+      // Estabelece a barreira de tempo padrão de 30 segundos
       await completer.future.timeout(
         const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Timeout ao registrar conta'),
+        onTimeout: () => throw Exception('Timeout ao registrar conta na nuvem'),
       );
     } finally {
-      // Garante o fechamento limpo do canal enviando o handshake de encerramento
-      try {
-        channel.sink.add("<close xmlns='urn:ietf:params:xml:ns:xmpp-websocket'/>");
-        await channel.sink.close();
-      } catch (_) {
-        // Ignora erros caso o canal já tenha sido fechado pelo servidor remoto
-      }
+      // Garante que o cliente temporário seja liberado da memória
+      client.disconnect();
     }
   }
 
-  String _parseError(String xml) {
-    if (xml.contains('conflict')) return 'Usuário já existe';
-    if (xml.contains('not-acceptable')) return 'Dados inválidos';
-    if (xml.contains('forbidden')) return 'Registro não permitido';
-    if (xml.contains('not-allowed')) return 'Registro desabilitado';
-    return 'Erro ao criar conta';
+  String _parseError(String errorLog) {
+    final logLower = errorLog.toLowerCase();
+    if (logLower.contains('conflict')) return 'Usuário já existe';
+    if (logLower.contains('not-acceptable')) return 'Dados inválidos';
+    if (logLower.contains('forbidden')) return 'Registro não permitido';
+    if (logLower.contains('not-allowed')) return 'Registro desabilitado pelo servidor';
+    return 'Erro ao criar conta no servidor onyx.im';
   }
 }
