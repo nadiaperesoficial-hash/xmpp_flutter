@@ -15,11 +15,9 @@ class XmppRegistrar {
   });
 
   Future<void> register() async {
-    // CORREÇÃO DOS ERROS: Simulamos os headers HTTP obrigatórios da nuvem Hugging Face
-    // para evitar que o proxy deles feche a conexão abruptamente.
+    // CORREÇÃO DEFINITIVA: Removemos parâmetros de protocolo que barram handshakes no Hugging Face
     final channel = WebSocketChannel.connect(
       Uri.parse(UiAccount.wsUrl),
-      protocols: ['xmpp'],
     );
 
     final completer = Completer<void>();
@@ -28,13 +26,14 @@ class XmppRegistrar {
 
     channel.stream.listen(
       (data) {
-        // Acumula os chunks XML recebidos no stream do WebSocket
         buffer.write(data.toString());
         final xml = buffer.toString();
 
-        if (stage == 'open' && xml.contains('<open')) {
+        print("Log de Dados Recebidos: $xml"); // Ajuda a monitorar o fluxo no console
+
+        if (stage == 'open' && (xml.contains('<open') || xml.contains('<stream:features>'))) {
           stage = 'get_fields';
-          buffer.clear(); // Limpa apenas após validar a transição de estado
+          buffer.clear();
           
           // Solicita os campos de registro ao servidor onyx.im
           channel.sink.add(
@@ -46,7 +45,7 @@ class XmppRegistrar {
           stage = 'registering';
           buffer.clear();
           
-          // CORREÇÃO SINTÁTICA: Usando o fechamento XML correto '</query>'
+          // Envia as credenciais informadas na tela
           channel.sink.add(
             '<iq type="set" id="reg2" to="${UiAccount.serverDomain}">'
             '<query xmlns="jabber:iq:register">'
@@ -56,8 +55,7 @@ class XmppRegistrar {
             '</iq>',
           );
         } else if (stage == 'registering') {
-          // Intercepta a resposta definitiva do Prosody para o usuário no Flutter
-          if (xml.contains('type="result"')) {
+          if (xml.contains('type="result"') || xml.contains('registered')) {
             if (!completer.isCompleted) completer.complete();
           } else if (xml.contains('type="error"')) {
             if (!completer.isCompleted) {
@@ -76,7 +74,7 @@ class XmppRegistrar {
       },
     );
 
-    // Envia a estrofe de abertura forçando o namespace correto de WebSocket XMPP (RFC 7395)
+    // Envia o handshake inicial em conformidade com as regras do Prosody
     channel.sink.add(
       "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
       "to='${UiAccount.serverDomain}' version='1.0'/>",
@@ -84,17 +82,14 @@ class XmppRegistrar {
 
     try {
       await completer.future.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Timeout ao registrar conta na nuvem'),
+        const Duration(seconds: 20),
+        onTimeout: () => throw Exception('Timeout ao registrar conta'),
       );
     } finally {
-      // Garante o fechamento limpo do canal enviando o handshake de encerramento
       try {
         channel.sink.add("<close xmlns='urn:ietf:params:xml:ns:xmpp-websocket'/>");
         await channel.sink.close();
-      } catch (_) {
-        // Ignora erros caso o canal já tenha sido fechado pelo servidor remoto
-      }
+      } catch (_) {}
     }
   }
 
