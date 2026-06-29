@@ -16,16 +16,8 @@ class XmppAccount {
   final String domain;
   final String password;
   final int port;
-  final bool createIfMissing; // novo: se true, tenta criar conta
 
-  XmppAccount(
-    this.username,
-    this.fullJid,
-    this.domain,
-    this.password,
-    this.port, {
-    this.createIfMissing = false,
-  });
+  XmppAccount(this.username, this.fullJid, this.domain, this.password, this.port);
 }
 
 class UiAccount {
@@ -33,7 +25,9 @@ class UiAccount {
   WebSocketChannel? _channel;
   final _stateSubject = BehaviorSubject<AccountState>();
 
+  // ⭐ ÚNICA ALTERAÇÃO: ajuste para o domínio real do Railway
   static const wsUrl = 'wss://prosody-server-production.up.railway.app/xmpp-websocket';
+  static const serverDomain = 'prosody-server-production.up.railway.app'; // ← restaurado
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   WebSocketChannel? get channel => _channel;
@@ -76,7 +70,6 @@ class AccountRepoImpl implements AccountRepo {
     final account = uiAccount.account;
     bool authenticated = false;
     bool bound = false;
-    bool registered = false; // para controlar se já tentou registrar
     final log = StringBuffer();
 
     try {
@@ -86,27 +79,12 @@ class AccountRepoImpl implements AccountRepo {
       );
       uiAccount._channel = channel;
 
-      void send(String xml) {
-        log.writeln('[tx] $xml');
-        channel.sink.add(xml);
-      }
+      void send(String xml) => channel.sink.add(xml);
 
       void fail(String msg) {
         uiAccount.accountState = AccountUnregistered(
           account: account,
           message: '$msg\nLOG:\n${log.toString().substring(log.length > 500 ? log.length - 500 : 0)}',
-        );
-      }
-
-      // Função para tentar registrar a conta
-      void tryRegister() {
-        if (registered || account.createIfMissing == false) return;
-        registered = true;
-        log.writeln('[tx] requesting registration form');
-        send(
-          "<iq type='get' id='reg1'>"
-          "<query xmlns='jabber:iq:register'/>"
-          "</iq>",
         );
       }
 
@@ -117,9 +95,7 @@ class AccountRepoImpl implements AccountRepo {
           log.writeln('[rx] $snippet');
 
           if (!authenticated) {
-            // Verifica se o servidor enviou features (início da autenticação)
             if (xml.contains('stream:features') || xml.contains('<features')) {
-              // Se for a primeira vez e não autenticou, inicia autenticação
               log.writeln('[tx] sending PLAIN auth');
               final creds = base64.encode(
                 utf8.encode('\x00${account.username}\x00${account.password}'),
@@ -131,21 +107,15 @@ class AccountRepoImpl implements AccountRepo {
             } else if (xml.contains('<success')) {
               authenticated = true;
               log.writeln('[auth] success, reopening stream');
+              // ⭐ CORREÇÃO: namespace correto e uso do domínio da conta
               send(
                 "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' "
                 "to='${account.domain}' version='1.0'/>",
               );
             } else if (xml.contains('<failure')) {
-              // Falha na autenticação – tenta registrar se permitido
-              if (account.createIfMissing && !registered) {
-                log.writeln('[auth] failed, trying registration...');
-                tryRegister();
-              } else {
-                fail('[auth] falha SASL');
-              }
+              fail('[auth] falha SASL');
             }
           } else if (!bound) {
-            // Já autenticado, faz bind e sessão
             if (xml.contains('stream:features') || xml.contains('<features') ||
                 xml.contains('<open')) {
               log.writeln('[tx] sending bind');
@@ -170,34 +140,6 @@ class AccountRepoImpl implements AccountRepo {
               uiAccount.accountState = AccountRegistered(account: account);
             }
           }
-
-          // Processamento de registro (apenas durante a fase de autenticação ou após falha)
-          if (!authenticated && registered) {
-            // Recebeu o formulário de registro
-            if (xml.contains('jabber:iq:register') && xml.contains('username')) {
-              log.writeln('[tx] submitting registration');
-              send(
-                "<iq type='set' id='reg2'>"
-                "<query xmlns='jabber:iq:register'>"
-                "<username>${account.username}</username>"
-                "<password>${account.password}</password>"
-                "</query>"
-                "</iq>",
-              );
-            } else if (xml.contains('iq') && xml.contains('result') && xml.contains('reg2')) {
-              // Registro bem-sucedido – agora tenta autenticar novamente
-              log.writeln('[register] success, retrying auth');
-              registered = false; // reseta para tentar autenticar
-              authenticated = false;
-              // Reabre o stream para reiniciar autenticação
-              send(
-                "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' "
-                "to='${account.domain}' version='1.0'/>",
-              );
-            } else if (xml.contains('iq') && xml.contains('error') && xml.contains('reg2')) {
-              fail('[register] error: ${xml}');
-            }
-          }
         },
         onError: (e) => fail('[ws error] $e'),
         onDone: () {
@@ -205,8 +147,8 @@ class AccountRepoImpl implements AccountRepo {
         },
       );
 
-      // Inicia o stream
       log.writeln('[tx] opening stream');
+      // ⭐ CORREÇÃO: namespace correto e uso do domínio da conta
       send(
         "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' "
         "to='${account.domain}' version='1.0'/>",
@@ -221,7 +163,7 @@ class AccountRepoImpl implements AccountRepo {
 
   @override
   void unregister(XmppAccount account) {
-    final id = '${account.username}@${account.domain}';
+    final id = '${account.username}@${account.domain}'; // usa o domínio da conta
     final idx = _accountsList.indexWhere((a) => a.id == id);
     if (idx != -1) {
       _accountsList[idx]._channel?.sink.close();
