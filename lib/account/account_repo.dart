@@ -25,8 +25,10 @@ class UiAccount {
   WebSocketChannel? _channel;
   final _stateSubject = BehaviorSubject<AccountState>();
 
+  // Endpoint WebSocket do seu servidor no Railway
   static const wsUrl = 'wss://prosody-server-production.up.railway.app/xmpp-websocket';
-  static const serverDomain = 'onyx.im';
+  // Domínio do servidor (deve ser o mesmo do endpoint)
+  static const serverDomain = 'prosody-server-production.up.railway.app';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   WebSocketChannel? get channel => _channel;
@@ -90,7 +92,6 @@ class AccountRepoImpl implements AccountRepo {
       channel.stream.listen(
         (data) {
           final xml = data.toString();
-          // Loga primeiros 200 chars de cada mensagem
           final snippet = xml.length > 200 ? xml.substring(0, 200) : xml;
           log.writeln('[rx] $snippet');
 
@@ -161,7 +162,8 @@ class AccountRepoImpl implements AccountRepo {
 
   @override
   void unregister(XmppAccount account) {
-    final id = '${account.username}@${UiAccount.serverDomain}';
+    // Usa o domínio da conta para localizar, não o global, para consistência.
+    final id = '${account.username}@${account.domain}';
     final idx = _accountsList.indexWhere((a) => a.id == id);
     if (idx != -1) {
       _accountsList[idx]._channel?.sink.close();
