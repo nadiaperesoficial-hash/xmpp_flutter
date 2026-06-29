@@ -24,11 +24,8 @@ class UiAccount {
   Whixp? client;
   final _stateSubject = BehaviorSubject<AccountState>();
 
-  // CORREÇÃO: URL e porta corretas do WebSocket estável do xmpp.jp
-  static const wsUrl = 'wss://xmpp.jp:5281/xmpp-websocket';
-  
-  // CORREÇÃO: Domínio oficial do servidor público
-  static const serverDomain = 'xmpp.jp';
+  static const wsUrl = 'wss://prosody-production.up.railway.app/xmpp-websocket';
+  static const serverDomain = 'onyx.im';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   String get id => '${account.username}@${account.domain}';
@@ -61,13 +58,11 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // CORREÇÃO: Passado o host limpo e a porta numérica separada para o Whixp conectar via WebSocket
     final client = Whixp(
       jabberID: '${account.username}@${UiAccount.serverDomain}/simple_chat',
       password: account.password,
-      host: UiAccount.serverDomain, // 'xmpp.jp'
-      port: 5281,                   // Porta nativa de WebSocket do servidor
-      useTLS: true,
+      host: UiAccount.serverDomain,
+      wsEndpoint: UiAccount.wsUrl,
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
       logger: Log(enableWarning: true, enableError: true),
@@ -76,8 +71,7 @@ class AccountRepoImpl implements AccountRepo {
     uiAccount.client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    // Evento correto disparado após o handshake e a autenticação SASL
-    client.addEventHandler<dynamic>('connected', (_) {
+    client.addEventHandler<dynamic>('streamNegotiated', (_) {
       client.sendPresence();
       uiAccount.accountState = AccountRegistered(account: account);
     });
@@ -110,9 +104,7 @@ class AccountRepoImpl implements AccountRepo {
       );
     });
 
-    // Inicia a negociação assíncrona limpa sem passar parâmetros inválidos no método
     client.connect();
-
     return uiAccount;
   }
 
