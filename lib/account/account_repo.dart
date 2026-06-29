@@ -58,7 +58,6 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // Cria o cliente sem o parâmetro inválido
     final client = Whixp(
       jabberID: '${account.username}@${UiAccount.serverDomain}/simple_chat',
       password: account.password,
@@ -71,7 +70,8 @@ class AccountRepoImpl implements AccountRepo {
     uiAccount.client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    client.addEventHandler<dynamic>('streamNegotiated', (_) {
+    // Evento correto para quando a conexão WebSocket é estabelecida e autenticada
+    client.addEventHandler<dynamic>('connected', (_) {
       client.sendPresence();
       uiAccount.accountState = AccountRegistered(account: account);
     });
@@ -104,9 +104,10 @@ class AccountRepoImpl implements AccountRepo {
       );
     });
 
-    // Conecta passando a URI do WebSocket
+    // Conecta via WebSocket com a flag ativada
     client.connect(
       uri: Uri.parse(UiAccount.wsUrl),
+      useWebSocket: true, // ESSENCIAL para o Prosody no Hugging Face
     );
 
     return uiAccount;
