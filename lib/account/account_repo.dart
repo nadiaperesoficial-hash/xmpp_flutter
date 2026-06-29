@@ -24,9 +24,11 @@ class UiAccount {
   Whixp? client;
   final _stateSubject = BehaviorSubject<AccountState>();
 
-  // CORREÇÃO 3: Mantida a constante 'wsUrl' para o seu xmpp_registrar.dart ler sem erro de getter
-  static const wsUrl = 'wss://laylaprs-meuchatxmpp.hf.space/xmpp-websocket';
-  static const serverDomain = 'onyx.im';
+  // CORREÇÃO: Atualizado para o novo endereço WebSocket ativo na Railway
+  static const wsUrl = 'wss://prosody-production.up.railway.app/xmpp-websocket';
+  
+  // CORREÇÃO: Atualizado para o domínio padrão 'localhost' exigido pela imagem Docker do Prosody
+  static const serverDomain = 'localhost';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   String get id => '${account.username}@${account.domain}';
@@ -59,11 +61,11 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // CORREÇÃO 1 e 2: Removidos parâmetros inválidos. O Whixp aceita a URL do WebSocket direta no 'host'
+    // Inicializa o cliente Whixp direcionando as credenciais para o host da Railway
     final client = Whixp(
       jabberID: '${account.username}@${UiAccount.serverDomain}/simple_chat',
       password: account.password,
-      host: UiAccount.wsUrl, // Injeta o endereço wss:// completo do Hugging Face diretamente aqui
+      host: UiAccount.wsUrl, // Injeta o endpoint wss:// da Railway diretamente no transporte
       port: 443,
       useTLS: true,
       internalDatabasePath: 'whixp_${account.username}',
@@ -74,7 +76,7 @@ class AccountRepoImpl implements AccountRepo {
     uiAccount.client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    // Evento correto pós-autenticação bem sucedida no Whixp
+    // Evento correto disparado após o handshake estável do WebSocket na Railway
     client.addEventHandler<dynamic>('connected', (_) {
       client.sendPresence();
       uiAccount.accountState = AccountRegistered(account: account);
@@ -108,7 +110,7 @@ class AccountRepoImpl implements AccountRepo {
       );
     });
 
-    // Inicialização limpa e correta do método connect sem parâmetros
+    // Inicia a negociação assíncrona baseada nos parâmetros do construtor
     client.connect();
 
     return uiAccount;
