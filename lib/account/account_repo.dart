@@ -33,7 +33,6 @@ class UiAccount {
   String get id => '${account.username}@${account.domain}';
 
   set accountState(AccountState state) => _stateSubject.add(state);
-
   void sendXml(String xml) => _channel?.sink.add(xml);
 
   @override
@@ -68,9 +67,9 @@ class AccountRepoImpl implements AccountRepo {
 
   void _connect(UiAccount uiAccount) {
     final account = uiAccount.account;
-    final buffer = StringBuffer();
     bool authenticated = false;
     bool bound = false;
+    final log = StringBuffer();
 
     try {
       final channel = WebSocketChannel.connect(
@@ -81,115 +80,73 @@ class AccountRepoImpl implements AccountRepo {
 
       void send(String xml) => channel.sink.add(xml);
 
-      void processXml(String xml) {
-        // Fase 1: servidor confirmou abertura do stream
-        if (xml.contains('<open') && !authenticated) {
-          // Verifica se já veio features junto
-          if (xml.contains('stream:features') || xml.contains('<features')) {
-            _sendAuth(account, send);
-          }
-          // Se não veio features ainda, aguarda próxima mensagem
-          return;
-        }
-
-        // Fase 2: features em mensagem separada
-        if (!authenticated &&
-            (xml.contains('stream:features') || xml.contains('<features')) &&
-            !xml.contains('<open')) {
-          _sendAuth(account, send);
-          return;
-        }
-
-        // Fase 3: resultado da autenticação
-        if (!authenticated && xml.contains('<success')) {
-          authenticated = true;
-          buffer.clear();
-          // Reabre stream
-          send(
-            "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
-            "to='${UiAccount.serverDomain}' version='1.0'/>",
-          );
-          return;
-        }
-
-        if (!authenticated && xml.contains('<failure')) {
-          uiAccount.accountState = AccountUnregistered(
-            account: account,
-            message: '[auth] Usuário ou senha incorretos',
-          );
-          return;
-        }
-
-        // Fase 4: segundo <open> após reautenticação
-        if (authenticated && !bound && xml.contains('<open')) {
-          send(
-            "<iq type='set' id='bind1'>"
-            "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
-            "<resource>simple_chat</resource>"
-            "</bind>"
-            "</iq>",
-          );
-          return;
-        }
-
-        // Features após reautenticação — envia bind
-        if (authenticated && !bound &&
-            (xml.contains('stream:features') || xml.contains('<features'))) {
-          send(
-            "<iq type='set' id='bind1'>"
-            "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
-            "<resource>simple_chat</resource>"
-            "</bind>"
-            "</iq>",
-          );
-          return;
-        }
-
-        // Fase 5: bind confirmado
-        if (authenticated && !bound &&
-            (xml.contains('id=\'bind1\'') || xml.contains('id="bind1"')) &&
-            xml.contains('type=\'result\'') || xml.contains('type="result"') && xml.contains('bind')) {
-          bound = true;
-          send(
-            "<iq type='set' id='sess1'>"
-            "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
-            "</iq>",
-          );
-          return;
-        }
-
-        // Fase 6: session ou conectado
-        if (bound && (xml.contains('id=\'sess1\'') || xml.contains('id="sess1"') ||
-            xml.contains('type=\'result\'') || xml.contains('type="result"'))) {
-          send("<presence/>");
-          uiAccount.accountState = AccountRegistered(account: account);
-        }
+      void fail(String msg) {
+        uiAccount.accountState = AccountUnregistered(
+          account: account,
+          message: '$msg\nLOG:\n${log.toString().substring(log.length > 500 ? log.length - 500 : 0)}',
+        );
       }
 
       channel.stream.listen(
         (data) {
-          buffer.write(data.toString());
-          final xml = buffer.toString();
-          buffer.clear();
-          processXml(xml);
-        },
-        onError: (e) {
-          uiAccount.accountState = AccountUnregistered(
-            account: account,
-            message: '[ws error] ${e.toString()}',
-          );
-        },
-        onDone: () {
-          if (!bound) {
-            uiAccount.accountState = AccountUnregistered(
-              account: account,
-              message: '[ws done] auth=$authenticated bound=$bound',
-            );
+          final xml = data.toString();
+          // Loga primeiros 200 chars de cada mensagem
+          final snippet = xml.length > 200 ? xml.substring(0, 200) : xml;
+          log.writeln('[rx] $snippet');
+
+          if (!authenticated) {
+            if (xml.contains('stream:features') || xml.contains('<features')) {
+              log.writeln('[tx] sending PLAIN auth');
+              final creds = base64.encode(
+                utf8.encode('\x00${account.username}\x00${account.password}'),
+              );
+              send(
+                "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' "
+                "mechanism='PLAIN'>$creds</auth>",
+              );
+            } else if (xml.contains('<success')) {
+              authenticated = true;
+              log.writeln('[auth] success, reopening stream');
+              send(
+                "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
+                "to='${UiAccount.serverDomain}' version='1.0'/>",
+              );
+            } else if (xml.contains('<failure')) {
+              fail('[auth] falha SASL');
+            }
+          } else if (!bound) {
+            if (xml.contains('stream:features') || xml.contains('<features') ||
+                xml.contains('<open')) {
+              log.writeln('[tx] sending bind');
+              send(
+                "<iq type='set' id='bind1'>"
+                "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
+                "<resource>simple_chat</resource>"
+                "</bind>"
+                "</iq>",
+              );
+            } else if (xml.contains('bind') && xml.contains('result')) {
+              log.writeln('[tx] sending session');
+              send(
+                "<iq type='set' id='sess1'>"
+                "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
+                "</iq>",
+              );
+            } else if (xml.contains('sess1') || xml.contains('session')) {
+              bound = true;
+              log.writeln('[tx] sending presence');
+              send("<presence/>");
+              uiAccount.accountState = AccountRegistered(account: account);
+            }
           }
+        },
+        onError: (e) => fail('[ws error] $e'),
+        onDone: () {
+          if (!bound) fail('[done] auth=$authenticated bound=$bound');
         },
       );
 
-      // Abre stream
+      log.writeln('[tx] opening stream');
       send(
         "<open xmlns='urn:ietf:params:xml:ns:xmpp-websocket' "
         "to='${UiAccount.serverDomain}' version='1.0'/>",
@@ -197,19 +154,9 @@ class AccountRepoImpl implements AccountRepo {
     } catch (e) {
       uiAccount.accountState = AccountUnregistered(
         account: account,
-        message: '[connect error] ${e.toString()}',
+        message: '[connect error] $e',
       );
     }
-  }
-
-  void _sendAuth(XmppAccount account, void Function(String) send) {
-    final creds = base64.encode(
-      utf8.encode('\x00${account.username}\x00${account.password}'),
-    );
-    send(
-      "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' "
-      "mechanism='PLAIN'>$creds</auth>",
-    );
   }
 
   @override
