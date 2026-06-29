@@ -24,11 +24,11 @@ class UiAccount {
   Whixp? client;
   final _stateSubject = BehaviorSubject<AccountState>();
 
-  // CORREÇÃO: Atualizado para o novo endereço WebSocket ativo na Railway
-  static const wsUrl = 'wss://prosody-production.up.railway.app/xmpp-websocket';
+  // CORREÇÃO: URL e porta corretas do WebSocket estável do xmpp.jp
+  static const wsUrl = 'wss://xmpp.jp:5281/xmpp-websocket';
   
-  // CORREÇÃO: Atualizado para o domínio padrão 'localhost' exigido pela imagem Docker do Prosody
-  static const serverDomain = 'localhost';
+  // CORREÇÃO: Domínio oficial do servidor público
+  static const serverDomain = 'xmpp.jp';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   String get id => '${account.username}@${account.domain}';
@@ -61,12 +61,12 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
 
-    // Inicializa o cliente Whixp direcionando as credenciais para o host da Railway
+    // CORREÇÃO: Passado o host limpo e a porta numérica separada para o Whixp conectar via WebSocket
     final client = Whixp(
       jabberID: '${account.username}@${UiAccount.serverDomain}/simple_chat',
       password: account.password,
-      host: UiAccount.wsUrl, // Injeta o endpoint wss:// da Railway diretamente no transporte
-      port: 443,
+      host: UiAccount.serverDomain, // 'xmpp.jp'
+      port: 5281,                   // Porta nativa de WebSocket do servidor
       useTLS: true,
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
@@ -76,7 +76,7 @@ class AccountRepoImpl implements AccountRepo {
     uiAccount.client = client;
     uiAccount.accountState = AccountRegistering(account: account);
 
-    // Evento correto disparado após o handshake estável do WebSocket na Railway
+    // Evento correto disparado após o handshake e a autenticação SASL
     client.addEventHandler<dynamic>('connected', (_) {
       client.sendPresence();
       uiAccount.accountState = AccountRegistered(account: account);
@@ -110,7 +110,7 @@ class AccountRepoImpl implements AccountRepo {
       );
     });
 
-    // Inicia a negociação assíncrona baseada nos parâmetros do construtor
+    // Inicia a negociação assíncrona limpa sem passar parâmetros inválidos no método
     client.connect();
 
     return uiAccount;
