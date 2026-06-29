@@ -17,11 +17,20 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   late LoginBloc _loginBloc;
+  String _debugLog = '';
 
   @override
   void initState() {
     super.initState();
     _loginBloc = LoginBloc(accountBloc: widget.accountBloc);
+
+    widget.accountBloc.stream.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        final ts = DateTime.now().toIso8601String().substring(11, 19);
+        _debugLog = '[$ts] ${state.toString()}\n$_debugLog';
+      });
+    });
   }
 
   @override
@@ -36,7 +45,6 @@ class _LoginPageState extends State<LoginPage> {
       bloc: widget.accountBloc,
       listener: (context, state) {
         if (state is AccountRegistering) {
-          // Mostra loading
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Conectando...'),
@@ -46,11 +54,14 @@ class _LoginPageState extends State<LoginPage> {
         } else {
           ScaffoldMessenger.of(context).hideCurrentSnackBar();
         }
-        if (state is AccountUnregistered && state.message != null && state.message!.isNotEmpty) {
+        if (state is AccountUnregistered &&
+            state.message != null &&
+            state.message!.isNotEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(state.message!),
               backgroundColor: Colors.red,
+              duration: const Duration(seconds: 10),
             ),
           );
         }
@@ -58,8 +69,33 @@ class _LoginPageState extends State<LoginPage> {
       child: Scaffold(
         backgroundColor: Colors.white,
         body: SafeArea(
-          child: Center(
-            child: LoginForm(loginBloc: _loginBloc),
+          child: Column(
+            children: [
+              Expanded(
+                child: Center(
+                  child: LoginForm(loginBloc: _loginBloc),
+                ),
+              ),
+              // Debug log visível
+              if (_debugLog.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 160),
+                  color: Colors.black87,
+                  padding: const EdgeInsets.all(8),
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: Text(
+                      _debugLog,
+                      style: const TextStyle(
+                        color: Colors.greenBright,
+                        fontSize: 10,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
