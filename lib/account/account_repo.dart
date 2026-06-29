@@ -25,8 +25,8 @@ class UiAccount {
   WebSocketChannel? _channel;
   final _stateSubject = BehaviorSubject<AccountState>();
 
+  // Endpoint WebSocket do servidor (não precisa ser o mesmo domínio do XMPP)
   static const wsUrl = 'wss://prosody-server-production.up.railway.app/xmpp-websocket';
-  static const serverDomain = 'prosody-server-production.up.railway.app';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   WebSocketChannel? get channel => _channel;
@@ -78,7 +78,10 @@ class AccountRepoImpl implements AccountRepo {
       );
       uiAccount._channel = channel;
 
-      void send(String xml) => channel.sink.add(xml);
+      void send(String xml) {
+        log.writeln('[tx] $xml');
+        channel.sink.add(xml);
+      }
 
       void fail(String msg) {
         uiAccount.accountState = AccountUnregistered(
@@ -106,9 +109,10 @@ class AccountRepoImpl implements AccountRepo {
             } else if (xml.contains('<success')) {
               authenticated = true;
               log.writeln('[auth] success, reopening stream');
+              // Reabre o stream com o namespace correto e o domínio da conta
               send(
-                "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' " // ← namespace corrigido
-                "to='${UiAccount.serverDomain}' version='1.0'/>",
+                "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' "
+                "to='${account.domain}' version='1.0'/>",
               );
             } else if (xml.contains('<failure')) {
               fail('[auth] falha SASL');
@@ -145,10 +149,11 @@ class AccountRepoImpl implements AccountRepo {
         },
       );
 
+      // Envia o <open> inicial com namespace correto e domínio da conta
       log.writeln('[tx] opening stream');
       send(
-        "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' " // ← namespace corrigido
-        "to='${UiAccount.serverDomain}' version='1.0'/>",
+        "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' "
+        "to='${account.domain}' version='1.0'/>",
       );
     } catch (e) {
       uiAccount.accountState = AccountUnregistered(
