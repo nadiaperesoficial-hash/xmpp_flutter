@@ -25,9 +25,8 @@ class UiAccount {
   WebSocketChannel? _channel;
   final _stateSubject = BehaviorSubject<AccountState>();
 
-  // ⭐ ÚNICA ALTERAÇÃO: ajuste para o domínio real do Railway
   static const wsUrl = 'wss://prosody-server-production.up.railway.app/xmpp-websocket';
-  static const serverDomain = 'prosody-server-production.up.railway.app'; // ← restaurado
+  static const serverDomain = 'prosody-server-production.up.railway.app';
 
   Stream<AccountState> get accountStateStream => _stateSubject.stream;
   WebSocketChannel? get channel => _channel;
@@ -51,6 +50,9 @@ class UiAccount {
 class AccountRepoImpl implements AccountRepo {
   final _accountSubject = BehaviorSubject<List<UiAccount>>();
   final List<UiAccount> _accountsList = [];
+
+  // namespace correto conforme RFC 7395
+  static const _nsFraming = 'urn:ietf:params:xml:ns:xmpp-framing';
 
   @override
   Stream<List<UiAccount>> get accounts => _accountSubject.stream;
@@ -79,24 +81,33 @@ class AccountRepoImpl implements AccountRepo {
       );
       uiAccount._channel = channel;
 
-      void send(String xml) => channel.sink.add(xml);
+      void send(String xml) {
+        log.writeln('[tx] $xml');
+        channel.sink.add(xml);
+      }
 
       void fail(String msg) {
         uiAccount.accountState = AccountUnregistered(
           account: account,
-          message: '$msg\nLOG:\n${log.toString().substring(log.length > 500 ? log.length - 500 : 0)}',
+          message: '$msg\n${log.toString().substring(log.length > 600 ? log.length - 600 : 0)}',
         );
       }
 
       channel.stream.listen(
         (data) {
           final xml = data.toString();
-          final snippet = xml.length > 200 ? xml.substring(0, 200) : xml;
+          final snippet = xml.length > 300 ? xml.substring(0, 300) : xml;
           log.writeln('[rx] $snippet');
 
+          if (xml.contains('stream:error') || xml.contains('<error')) {
+            fail('[server error] $snippet');
+            return;
+          }
+
           if (!authenticated) {
-            if (xml.contains('stream:features') || xml.contains('<features')) {
-              log.writeln('[tx] sending PLAIN auth');
+            if (xml.contains('PLAIN') ||
+                xml.contains('stream:features') ||
+                xml.contains('<features')) {
               final creds = base64.encode(
                 utf8.encode('\x00${account.username}\x00${account.password}'),
               );
@@ -106,19 +117,16 @@ class AccountRepoImpl implements AccountRepo {
               );
             } else if (xml.contains('<success')) {
               authenticated = true;
-              log.writeln('[auth] success, reopening stream');
-              // ⭐ CORREÇÃO: namespace correto e uso do domínio da conta
-              send(
-                "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' "
-                "to='${account.domain}' version='1.0'/>",
-              );
+              send("<open xmlns='$_nsFraming' to='${UiAccount.serverDomain}' version='1.0'/>");
             } else if (xml.contains('<failure')) {
-              fail('[auth] falha SASL');
+              fail('[auth] Usuário ou senha incorretos');
+            } else if (xml.contains('<open')) {
+              // open recebido, aguarda features
             }
           } else if (!bound) {
-            if (xml.contains('stream:features') || xml.contains('<features') ||
+            if (xml.contains('stream:features') ||
+                xml.contains('<features') ||
                 xml.contains('<open')) {
-              log.writeln('[tx] sending bind');
               send(
                 "<iq type='set' id='bind1'>"
                 "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
@@ -127,15 +135,14 @@ class AccountRepoImpl implements AccountRepo {
                 "</iq>",
               );
             } else if (xml.contains('bind') && xml.contains('result')) {
-              log.writeln('[tx] sending session');
               send(
                 "<iq type='set' id='sess1'>"
                 "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
                 "</iq>",
               );
-            } else if (xml.contains('sess1') || xml.contains('session')) {
+            } else if (xml.contains('sess1') ||
+                (xml.contains('result') && xml.contains('sess'))) {
               bound = true;
-              log.writeln('[tx] sending presence');
               send("<presence/>");
               uiAccount.accountState = AccountRegistered(account: account);
             }
@@ -147,12 +154,8 @@ class AccountRepoImpl implements AccountRepo {
         },
       );
 
-      log.writeln('[tx] opening stream');
-      // ⭐ CORREÇÃO: namespace correto e uso do domínio da conta
-      send(
-        "<open xmlns='urn:ietf:params:xmlns:xmpp-framing' "
-        "to='${account.domain}' version='1.0'/>",
-      );
+      // namespace correto: urn:ietf:params:xml:ns:xmpp-framing (sem xmlns extra)
+      send("<open xmlns='$_nsFraming' to='${UiAccount.serverDomain}' version='1.0'/>");
     } catch (e) {
       uiAccount.accountState = AccountUnregistered(
         account: account,
@@ -163,7 +166,7 @@ class AccountRepoImpl implements AccountRepo {
 
   @override
   void unregister(XmppAccount account) {
-    final id = '${account.username}@${account.domain}'; // usa o domínio da conta
+    final id = '${account.username}@${UiAccount.serverDomain}';
     final idx = _accountsList.indexWhere((a) => a.id == id);
     if (idx != -1) {
       _accountsList[idx]._channel?.sink.close();
