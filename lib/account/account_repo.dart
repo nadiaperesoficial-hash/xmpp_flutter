@@ -46,6 +46,9 @@ class AccountRepoImpl implements AccountRepo {
   final _accountSubject = BehaviorSubject<List<UiAccount>>();
   final List<UiAccount> _accountsList = [];
 
+  static const _wsUrl = 'wss://laylaprs-meuchatxmpp.hf.space/xmpp-websocket';
+  static const _domain = 'onyx.im';
+
   @override
   Stream<List<UiAccount>> get accounts => _accountSubject.stream;
 
@@ -57,10 +60,10 @@ class AccountRepoImpl implements AccountRepo {
     _accountSubject.add(_accountsList);
 
     final client = Whixp(
-      jabberID: '${account.username}@${account.domain}/simple_chat',
+      jabberID: '${account.username}@$_domain/simple_chat',
       password: account.password,
-      host: account.domain,
-      port: account.port,
+      host: _domain,
+      wsEndpoint: _wsUrl,
       internalDatabasePath: 'whixp_${account.username}',
       reconnectionPolicy: RandomBackoffReconnectionPolicy(1, 3),
       logger: Log(enableWarning: true, enableError: true),
@@ -77,14 +80,14 @@ class AccountRepoImpl implements AccountRepo {
     client.addEventHandler<dynamic>('disconnected', (_) {
       uiAccount.accountState = AccountUnregistered(
         account: account,
-        message: '[disconnected] Conexão encerrada pelo servidor',
+        message: '[disconnected] Conexão encerrada',
       );
     });
 
     client.addEventHandler<dynamic>('failed', (_) {
       uiAccount.accountState = AccountUnregistered(
         account: account,
-        message: '[failed] Falha na autenticação SASL',
+        message: '[failed] Falha na autenticação',
       );
     });
 
@@ -92,20 +95,6 @@ class AccountRepoImpl implements AccountRepo {
       uiAccount.accountState = AccountUnregistered(
         account: account,
         message: '[connectionFailed] ${e?.toString() ?? "sem detalhes"}',
-      );
-    });
-
-    client.addEventHandler<dynamic>('tlsFailed', (e) {
-      uiAccount.accountState = AccountUnregistered(
-        account: account,
-        message: '[tlsFailed] ${e?.toString() ?? "TLS falhou"}',
-      );
-    });
-
-    client.addEventHandler<dynamic>('authFailed', (e) {
-      uiAccount.accountState = AccountUnregistered(
-        account: account,
-        message: '[authFailed] ${e?.toString() ?? "auth falhou"}',
       );
     });
 
@@ -122,7 +111,7 @@ class AccountRepoImpl implements AccountRepo {
 
   @override
   void unregister(XmppAccount account) {
-    final id = '${account.username}@${account.domain}';
+    final id = '${account.username}@$_domain';
     final idx = _accountsList.indexWhere((a) => a.id == id);
     if (idx != -1) {
       _accountsList[idx]._client?.disconnect();
