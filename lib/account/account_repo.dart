@@ -77,14 +77,42 @@ class AccountRepoImpl implements AccountRepo {
     client.addEventHandler<dynamic>('disconnected', (_) {
       uiAccount.accountState = AccountUnregistered(
         account: account,
-        message: 'Conexão encerrada',
+        message: '[disconnected] Conexão encerrada pelo servidor',
       );
     });
 
     client.addEventHandler<dynamic>('failed', (_) {
       uiAccount.accountState = AccountUnregistered(
         account: account,
-        message: 'Falha na autenticação',
+        message: '[failed] Falha na autenticação SASL',
+      );
+    });
+
+    client.addEventHandler<dynamic>('connectionFailed', (e) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: '[connectionFailed] ${e?.toString() ?? "sem detalhes"}',
+      );
+    });
+
+    client.addEventHandler<dynamic>('tlsFailed', (e) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: '[tlsFailed] ${e?.toString() ?? "TLS falhou"}',
+      );
+    });
+
+    client.addEventHandler<dynamic>('authFailed', (e) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: '[authFailed] ${e?.toString() ?? "auth falhou"}',
+      );
+    });
+
+    client.addEventHandler<dynamic>('error', (e) {
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: '[error] ${e?.toString() ?? "erro desconhecido"}',
       );
     });
 
