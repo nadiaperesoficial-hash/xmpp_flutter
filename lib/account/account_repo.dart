@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:rxdart/rxdart.dart';
 import 'package:simple_chat/account/account_state.dart';
-import 'package:simple_chat/account/xmpp_servers.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 abstract class AccountRepo {
@@ -26,8 +25,6 @@ class UiAccount {
   WebSocketChannel? _channel;
   final _stateSubject = BehaviorSubject<AccountState>();
 
-  // Mantidos por compatibilidade com código existente (ex: xmpp_registrar.dart).
-  // Apontam para o servidor primário (Railway), porta 443.
   static const wsUrl = 'wss://prosody-server-production.up.railway.app/xmpp-websocket';
   static const serverDomain = 'prosody-server-production.up.railway.app';
 
@@ -54,7 +51,6 @@ class AccountRepoImpl implements AccountRepo {
   final _accountSubject = BehaviorSubject<List<UiAccount>>();
   final List<UiAccount> _accountsList = [];
 
-  // namespace correto conforme RFC 7395
   static const _nsFraming = 'urn:ietf:params:xml:ns:xmpp-framing';
 
   @override
@@ -67,45 +63,22 @@ class AccountRepoImpl implements AccountRepo {
     _accountsList.add(uiAccount);
     _accountSubject.add(_accountsList);
     uiAccount.accountState = AccountRegistering(account: account);
-
-    final domain = account.domain.isNotEmpty ? account.domain : UiAccount.serverDomain;
-    final urls = candidateWsUrls(domain);
-    _connectWithFallback(uiAccount, urls, 0, StringBuffer());
+    _connect(uiAccount);
     return uiAccount;
   }
 
-  /// Tenta conectar usando a lista de URLs candidatas (443 primeiro, depois 5280...).
-  /// Se uma falhar (erro de conexão ou stream:error logo no início), tenta a próxima.
-  void _connectWithFallback(
-    UiAccount uiAccount,
-    List<String> urls,
-    int index,
-    StringBuffer log,
-  ) {
-    if (index >= urls.length) {
-      uiAccount.accountState = AccountUnregistered(
-        account: uiAccount.account,
-        message: '[connect error] Nenhuma porta funcionou.\n${log.toString()}',
-      );
-      return;
-    }
-
-    final url = urls[index];
-    log.writeln('[info] tentando $url');
-
+  void _connect(UiAccount uiAccount) {
+    final account = uiAccount.account;
     bool authenticated = false;
+    bool reopened = false;
     bool bound = false;
-    bool movedOn = false;
-
-    void tryNext(String reason) {
-      if (movedOn) return;
-      movedOn = true;
-      log.writeln('[fallback] $reason -> próxima porta');
-      _connectWithFallback(uiAccount, urls, index + 1, log);
-    }
+    final log = StringBuffer();
 
     try {
-      final channel = WebSocketChannel.connect(Uri.parse(url), protocols: ['xmpp']);
+      final channel = WebSocketChannel.connect(
+        Uri.parse(UiAccount.wsUrl),
+        protocols: ['xmpp'],
+      );
       uiAccount._channel = channel;
 
       void send(String xml) {
@@ -115,8 +88,8 @@ class AccountRepoImpl implements AccountRepo {
 
       void fail(String msg) {
         uiAccount.accountState = AccountUnregistered(
-          account: uiAccount.account,
-          message: '$msg\n${log.toString().substring(log.length > 600 ? log.length - 600 : 0)}',
+          account: account,
+          message: '$msg\n${log.toString().substring(log.length > 700 ? log.length - 700 : 0)}',
         );
       }
 
@@ -127,13 +100,7 @@ class AccountRepoImpl implements AccountRepo {
           log.writeln('[rx] $snippet');
 
           if (xml.contains('stream:error') || xml.contains('<error')) {
-            // Se ainda não autenticou, pode ser problema desta porta/servidor:
-            // tenta a próxima antes de desistir.
-            if (!authenticated) {
-              tryNext('[server error] $snippet');
-            } else {
-              fail('[server error] $snippet');
-            }
+            fail('[server error] $snippet');
             return;
           }
 
@@ -142,7 +109,7 @@ class AccountRepoImpl implements AccountRepo {
                 xml.contains('stream:features') ||
                 xml.contains('<features')) {
               final creds = base64.encode(
-                utf8.encode('\x00${uiAccount.account.username}\x00${uiAccount.account.password}'),
+                utf8.encode('\x00${account.username}\x00${account.password}'),
               );
               send(
                 "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' "
@@ -150,66 +117,63 @@ class AccountRepoImpl implements AccountRepo {
               );
             } else if (xml.contains('<success')) {
               authenticated = true;
-              movedOn = true; // não tenta outra porta depois de autenticar
-              send("<open xmlns='$_nsFraming' to='${uiAccount.account.domain}' version='1.0'/>");
+              send("<open xmlns='$_nsFraming' to='${UiAccount.serverDomain}' version='1.0'/>");
             } else if (xml.contains('<failure')) {
-              movedOn = true;
               fail('[auth] Usuário ou senha incorretos');
-            } else if (xml.contains('<open')) {
-              // open recebido, aguarda features
             }
-          } else if (!bound) {
-            if (xml.contains('stream:features') ||
-                xml.contains('<features') ||
-                xml.contains('<open')) {
+            return;
+          }
+
+          // Após autenticar, aguarda o segundo <open> confirmando reabertura
+          if (authenticated && !reopened) {
+            if (xml.contains('<open')) {
+              reopened = true;
+              // Aguarda as features chegarem na próxima mensagem
+            }
+            return;
+          }
+
+          // Agora processa as features pós-reabertura e envia bind
+          if (reopened && !bound) {
+            if (xml.contains('stream:features') || xml.contains('<features')) {
               send(
-                "<iq type='set' id='bind1'>"
+                "<iq type='set' id='bind1' xmlns='jabber:client'>"
                 "<bind xmlns='urn:ietf:params:xml:ns:xmpp-bind'>"
                 "<resource>simple_chat</resource>"
                 "</bind>"
                 "</iq>",
               );
-            } else if (xml.contains('bind') && xml.contains('result')) {
-              send(
-                "<iq type='set' id='sess1'>"
-                "<session xmlns='urn:ietf:params:xml:ns:xmpp-session'/>"
-                "</iq>",
-              );
-            } else if (xml.contains('sess1') ||
-                (xml.contains('result') && xml.contains('sess'))) {
-              bound = true;
-              send("<presence/>");
-              uiAccount.accountState = AccountRegistered(account: uiAccount.account);
+            } else if (xml.contains('id=\'bind1\'') || xml.contains('id="bind1"')) {
+              if (xml.contains('type=\'result\'') || xml.contains('type="result"')) {
+                bound = true;
+                send("<presence xmlns='jabber:client'/>");
+                uiAccount.accountState = AccountRegistered(account: account);
+              } else {
+                fail('[bind error] $snippet');
+              }
             }
           }
         },
-        onError: (e) {
-          if (!authenticated) {
-            tryNext('[ws error] $e');
-          } else {
-            fail('[ws error] $e');
-          }
-        },
+        onError: (e) => fail('[ws error] $e'),
         onDone: () {
           if (!bound) {
-            if (!authenticated) {
-              tryNext('[done] conexão fechada antes de autenticar');
-            } else {
-              fail('[done] auth=$authenticated bound=$bound');
-            }
+            fail('[done] auth=$authenticated reopened=$reopened bound=$bound');
           }
         },
       );
 
-      send("<open xmlns='$_nsFraming' to='${uiAccount.account.domain}' version='1.0'/>");
+      send("<open xmlns='$_nsFraming' to='${UiAccount.serverDomain}' version='1.0'/>");
     } catch (e) {
-      tryNext('[connect error] $e');
+      uiAccount.accountState = AccountUnregistered(
+        account: account,
+        message: '[connect error] $e',
+      );
     }
   }
 
   @override
   void unregister(XmppAccount account) {
-    final id = '${account.username}@${account.domain}';
+    final id = '${account.username}@${UiAccount.serverDomain}';
     final idx = _accountsList.indexWhere((a) => a.id == id);
     if (idx != -1) {
       _accountsList[idx]._channel?.sink.close();
