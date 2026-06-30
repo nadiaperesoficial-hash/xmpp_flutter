@@ -1,3 +1,3 @@
-# simple_chat
+# Onyx xmpp 
 
-Simple chat application utilizing Xmpp Stone library
+ application utilizing Xmpp 
