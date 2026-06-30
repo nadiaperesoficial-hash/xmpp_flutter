@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:simple_chat/account/xmpp_servers.dart';
 import 'package:simple_chat/login/login_bloc.dart';
 import 'package:simple_chat/login/login_event.dart';
 import 'package:simple_chat/login/login_state.dart';
 import 'package:simple_chat/main_page/main_page_widget.dart';
 
-const List<Map<String, dynamic>> kPublicServers = [
-  {'name': 'xmpp.jp', 'domain': 'xmpp.jp', 'port': 5222},
-  {'name': '404.city', 'domain': '404.city', 'port': 5222},
-  {'name': 'jabber.org', 'domain': 'jabber.org', 'port': 5222},
-  {'name': 'conversations.im', 'domain': 'conversations.im', 'port': 5222},
-  {'name': 'jabber.de', 'domain': 'jabber.de', 'port': 5222},
-  {'name': 'draugr.de', 'domain': 'draugr.de', 'port': 5222},
-  {'name': 'magicbroccoli.de', 'domain': 'magicbroccoli.de', 'port': 5222},
-  {'name': 'yax.im', 'domain': 'yax.im', 'port': 5222},
-  {'name': 'jabber.fr', 'domain': 'jabber.fr', 'port': 5222},
-];
+/// Lista usada pelo picker de "servidor público" na tela de login.
+/// Gerada a partir de kAllServers (lib/account/xmpp_servers.dart), que é a
+/// mesma fonte usada pela conexão real (account_repo.dart / xmpp_registrar.dart).
+/// Assim, a porta mostrada aqui é sempre a porta WebSocket de fato usada
+/// (443 como prioridade, com fallback automático para 5280).
+final List<Map<String, dynamic>> _pickerServers = kAllServers
+    .map((s) => {
+          'name': s.name,
+          'domain': s.domain,
+          'port': s.wsPorts.first, // porta primária exibida (443)
+          'fallbackPort': s.wsPorts.length > 1 ? s.wsPorts[1] : null,
+        })
+    .toList();
 
 class LoginForm extends StatefulWidget {
   final LoginBloc loginBloc;
@@ -58,17 +61,23 @@ class _LoginFormState extends State<LoginForm> {
           const SizedBox(height: 12),
           const Text('Servidores públicos', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const Divider(),
-          ...kPublicServers.map((s) => ListTile(
-            leading: const Icon(Icons.dns, color: Colors.lightBlueAccent),
-            title: Text(s['name'] as String),
-            subtitle: Text('porta ${s['port']}'),
-            onTap: () {
-              _domainController.text = s['domain'] as String;
-              _portController.text = s['port'].toString();
-              if (!_isExtended) setState(() => _isExtended = true);
-              Navigator.pop(context);
-            },
-          )),
+          ..._pickerServers.map((s) {
+            final fallback = s['fallbackPort'];
+            final subtitle = fallback != null
+                ? 'porta ${s['port']} (fallback ${fallback})'
+                : 'porta ${s['port']}';
+            return ListTile(
+              leading: const Icon(Icons.dns, color: Colors.lightBlueAccent),
+              title: Text(s['name'] as String),
+              subtitle: Text(subtitle),
+              onTap: () {
+                _domainController.text = s['domain'] as String;
+                _portController.text = s['port'].toString();
+                if (!_isExtended) setState(() => _isExtended = true);
+                Navigator.pop(context);
+              },
+            );
+          }),
           const SizedBox(height: 12),
         ],
       ),
@@ -80,7 +89,7 @@ class _LoginFormState extends State<LoginForm> {
       username: _usernameController.text.trim(),
       password: _passwordController.text,
       domain: _domainController.text.trim(),
-      port: int.tryParse(_portController.text) ?? 5222,
+      port: int.tryParse(_portController.text) ?? 443,
     ));
   }
 
@@ -98,7 +107,7 @@ class _LoginFormState extends State<LoginForm> {
       username: username,
       password: _passwordController.text,
       domain: domain,
-      port: int.tryParse(_portController.text) ?? 5222,
+      port: int.tryParse(_portController.text) ?? 443,
     ));
   }
 
@@ -181,7 +190,7 @@ class _LoginFormState extends State<LoginForm> {
           Row(children: [
             Expanded(flex: 3, child: TextFormField(controller: _domainController, decoration: InputDecoration(hintText: 'servidor', prefixIcon: const Icon(Icons.dns_outlined), contentPadding: const EdgeInsets.fromLTRB(20, 10, 20, 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(32))))),
             const SizedBox(width: 8),
-            Expanded(child: TextFormField(controller: _portController, keyboardType: TextInputType.number, decoration: InputDecoration(hintText: '5222', contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(32))))),
+            Expanded(child: TextFormField(controller: _portController, keyboardType: TextInputType.number, decoration: InputDecoration(hintText: '443', contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10), border: OutlineInputBorder(borderRadius: BorderRadius.circular(32))))),
           ]),
           const SizedBox(height: 8),
           TextButton.icon(onPressed: _showServerPicker, icon: const Icon(Icons.list, color: Colors.blueAccent), label: const Text('Escolher servidor público', style: TextStyle(color: Colors.blueAccent))),
@@ -194,7 +203,6 @@ class _LoginFormState extends State<LoginForm> {
           ]),
           TextButton(onPressed: () => _loginBloc.add(ExtendPressed()), child: Text(_isExtended ? 'Básico' : 'Avançado', style: const TextStyle(color: Colors.blueAccent))),
         ]),
-        // 🔽 Exibe a mensagem de erro se existir
         if (_authMessage != null && _authMessage!.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
