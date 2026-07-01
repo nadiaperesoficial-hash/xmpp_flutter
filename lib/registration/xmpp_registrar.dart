@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'package:simple_chat/account/xmpp_servers.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class XmppRegistrar {
   final String username;
   final String password;
-  final String wsUrl;
   final String serverDomain;
+  final List<String> _wsUrls;
 
   static const _nsFraming = 'urn:ietf:params:xml:ns:xmpp-framing';
 
@@ -15,10 +16,23 @@ class XmppRegistrar {
     required int port,
     required this.username,
     required this.password,
-  })  : wsUrl = 'wss://$host/xmpp-websocket',
-        serverDomain = domain;
+  })  : serverDomain = domain,
+        _wsUrls = candidateWsUrls(host);
 
   Future<void> register() async {
+    Object? lastError;
+    for (final url in _wsUrls) {
+      try {
+        await _registerOnUrl(url);
+        return; // sucesso
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError ?? Exception('Nenhuma porta WebSocket respondeu');
+  }
+
+  Future<void> _registerOnUrl(String wsUrl) async {
     final completer = Completer<void>();
     final log = StringBuffer();
     String stage = 'open';
@@ -92,8 +106,8 @@ class XmppRegistrar {
       send("<open xmlns='$_nsFraming' to='$serverDomain' version='1.0'/>");
 
       await completer.future.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Timeout ao registrar conta\n${log.toString()}'),
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('Timeout ao registrar conta ($wsUrl)\n${log.toString()}'),
       );
     } finally {
       try {
