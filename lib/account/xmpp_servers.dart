@@ -29,7 +29,7 @@ class XmppServerOption {
 /// Servidor próprio (Railway) sempre como primeira opção.
 const kPrimaryServer = XmppServerOption(
   name: 'Meu servidor (Railway)',
-  domain: 'prosody-server-production.up.railway.app',
+  domain: 'jabber.up.railway.app',
   wsPorts: [443, 5280],
 );
 
