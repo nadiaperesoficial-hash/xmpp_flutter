@@ -33,6 +33,13 @@ const kPrimaryServer = XmppServerOption(
   wsPorts: [443, 5280],
 );
 
+/// Segundo servidor próprio (Railway), para distribuir carga.
+const kSecondaryServer = XmppServerOption(
+  name: 'onyx1 (Railway)',
+  domain: 'onyx1.up.railway.app',
+  wsPorts: [443, 5280],
+);
+
 /// Lista de servidores públicos conhecidos (baseado na lista do Yaxim),
 /// usados como alternativa caso o usuário escolha "servidor público".
 const kPublicServers = <XmppServerOption>[
@@ -42,8 +49,12 @@ const kPublicServers = <XmppServerOption>[
   XmppServerOption(name: 'brauchen.info', domain: 'brauchen.info'),
 ];
 
-/// Todos os servidores conhecidos (primário + públicos), nessa ordem.
-const kAllServers = <XmppServerOption>[kPrimaryServer, ...kPublicServers];
+/// Todos os servidores conhecidos (primário + secundário + públicos), nessa ordem.
+const kAllServers = <XmppServerOption>[
+  kPrimaryServer,
+  kSecondaryServer,
+  ...kPublicServers,
+];
 
 /// Procura um servidor conhecido pelo domínio informado.
 /// Se não encontrar, cria uma opção genérica com fallback padrão 443->5280.
