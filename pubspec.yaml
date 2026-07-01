@@ -20,6 +20,8 @@ dependencies:
   path: ^1.8.0
   quiver: ^3.2.1
   cupertino_icons: ^1.0.6
+  image_picker: ^1.0.7
+  flutter_image_compress: ^2.2.0
 
 dev_dependencies:
   flutter_test:
